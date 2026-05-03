@@ -57,7 +57,10 @@ export function registerPlayerResource(deps: ToolDeps): void {
           text: playerHtml,
           _meta: {
             ui: {
-              csp: {},
+              csp: {
+                connectDomains: ['blob:', 'data:'],
+                resourceDomains: ['blob:', 'data:'],
+              },
               ...(config.playerDomain ? { domain: config.playerDomain } : {}),
             },
             engineId: engine.id,

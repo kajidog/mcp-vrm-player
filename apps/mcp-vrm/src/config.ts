@@ -150,6 +150,15 @@ const ttsConfigDefs: ConfigDefs = {
     default: '',
     valueName: '<domain>',
   },
+  playerDefaultVrmPath: {
+    cli: '--player-default-vrm-path',
+    env: 'TTS_PLAYER_DEFAULT_VRM_PATH',
+    description: 'Default VRM file path for the player UI fallback',
+    group: 'UI Player Options',
+    type: 'string',
+    default: '',
+    valueName: '<path>',
+  },
   configFile: {
     cli: '--config',
     env: 'TTS_CONFIG',
@@ -185,6 +194,7 @@ export interface ServerConfig extends BaseServerConfig {
   playerAudioCacheEnabled: boolean
   playerAudioCacheTtlDays: number
   playerAudioCacheMaxMb: number
+  playerDefaultVrmPath: string
 
   // 無効化ツール
   disabledTools: string[]

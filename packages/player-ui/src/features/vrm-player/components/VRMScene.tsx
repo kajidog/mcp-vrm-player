@@ -1,0 +1,102 @@
+import { type VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
+import { useFrame } from '@react-three/fiber'
+import { useEffect, useRef, useState } from 'react'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { VrmSource } from '../types'
+
+interface VRMSceneProps {
+  source: VrmSource
+  onError: (message: string) => void
+}
+
+/**
+ * 渡された VrmSource を three.js シーンに常駐表示するコンポーネント。
+ * `source.data`（バイナリ）か `source.src`（URL）のいずれかからロードする。
+ */
+export function VRMScene({ source, onError }: VRMSceneProps) {
+  const [vrm, setVrm] = useState<VRM | null>(null)
+
+  // onError を ref 経由で参照し、コールバック差し替えで useEffect が再実行されないようにする。
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
+
+  useEffect(() => {
+    let disposed = false
+    let current: VRM | null = null
+    const loader = new GLTFLoader()
+    loader.register((parser) => new VRMLoaderPlugin(parser))
+    // 切り替え中に古いモデルを残さないように一旦クリア。
+    setVrm(null)
+
+    const handleLoaded = (gltf: { userData: Record<string, unknown> }) => {
+      const loaded = gltf.userData.vrm as VRM | undefined
+      // ロード完了より先にアンマウント／差し替えされたら、出来上がりを即破棄。
+      if (disposed) {
+        if (loaded) {
+          VRMUtils.deepDispose(loaded.scene)
+        }
+        return
+      }
+
+      if (!loaded) {
+        onErrorRef.current('VRM として読み込めませんでした。ファイル形式を確認してください。')
+        return
+      }
+
+      // VRM0 系を立たせ、不要頂点除去・スケルトン結合などの一括最適化。
+      VRMUtils.rotateVRM0(loaded)
+      VRMUtils.removeUnnecessaryVertices(loaded.scene)
+      VRMUtils.combineSkeletons(loaded.scene)
+      loaded.scene.updateMatrixWorld(true)
+      // Spring Bone を初期姿勢で安定させてから表示する（初動の暴れ防止）。
+      loaded.springBoneManager?.setInitState()
+      loaded.springBoneManager?.reset()
+      loaded.update(0)
+      current = loaded
+      setVrm(loaded)
+    }
+
+    const handleError = (error: unknown) => {
+      if (disposed) return
+      onErrorRef.current(error instanceof Error ? error.message : String(error))
+    }
+
+    if (source.data) {
+      // MCP Apps の sandbox では ImageBitmapLoader が内部で blob: fetch を使い、
+      // 埋め込みテクスチャ読み込みに失敗することがある。GLTFLoader はこのプロパティの
+      // 有無を `parse` 内で同期的に判定するため、parse 呼び出し中だけ undefined に
+      // 差し替えて TextureLoader 経路へ寄せる（callback で利用される頃には復元済みでよい）。
+      const originalCreateImageBitmap = globalThis.createImageBitmap
+      try {
+        globalThis.createImageBitmap = undefined as unknown as typeof globalThis.createImageBitmap
+        loader.parse(source.data, '', handleLoaded, handleError)
+      } finally {
+        globalThis.createImageBitmap = originalCreateImageBitmap
+      }
+    } else if (source.src) {
+      loader.load(source.src, handleLoaded, undefined, handleError)
+    } else {
+      onErrorRef.current('VRM データがありません。')
+    }
+
+    return () => {
+      disposed = true
+      if (current) {
+        VRMUtils.deepDispose(current.scene)
+      }
+    }
+  }, [source.data, source.src])
+
+  // 毎フレーム delta を渡して spring bone / 表情 / lookAt をシミュレーションする。
+  useFrame((_, delta) => {
+    if (!vrm) return
+    vrm.update(delta)
+  })
+
+  if (!vrm) return null
+
+  // VRM のルートが原点(0,0,0)に立つので、足元をグリッドに合わせて少し下げる。
+  return <primitive object={vrm.scene} position={[0, -1, 0]} />
+}

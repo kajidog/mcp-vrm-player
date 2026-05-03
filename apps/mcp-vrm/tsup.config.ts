@@ -17,11 +17,19 @@ export default defineConfig({
   onSuccess: async () => {
     const src = join('..', '..', 'packages', 'player-ui', 'dist', 'mcp-app.html')
     const dest = join('dist', 'mcp-app.html')
+    const assetsSrc = join('assets')
+    const assetsDest = join('dist', 'assets')
     try {
       cpSync(src, dest)
       console.log('Copied player-ui HTML to dist/mcp-app.html')
     } catch {
       console.warn('Warning: player-ui HTML not found. Build @kajidog/player-ui first.')
+    }
+    try {
+      cpSync(assetsSrc, assetsDest, { recursive: true })
+      console.log('Copied assets to dist/assets')
+    } catch {
+      console.warn('Warning: assets directory not found.')
     }
   },
 })
