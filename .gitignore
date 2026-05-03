@@ -31,3 +31,4 @@ yarn-error.log*
 
 # Player cache
 .voicevox-player-cache/
+.tts-player-cache/

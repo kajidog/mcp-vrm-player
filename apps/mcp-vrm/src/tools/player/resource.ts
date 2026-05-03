@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RESOURCE_MIME_TYPE, registerAppResource } from '@modelcontextprotocol/ext-apps/server'
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
+import { getVrmHttpOrigin } from '../../vrm-http.js'
 import type { ToolDeps } from '../types.js'
 import { playerResourceUri } from './runtime.js'
 
@@ -41,6 +42,7 @@ const playerHtml = loadPlayerHtml()
 
 export function registerPlayerResource(deps: ToolDeps): void {
   const { server, config, engine, capabilities } = deps
+  const vrmOrigin = getVrmHttpOrigin(config)
   registerAppResource(
     server,
     'VRM Player',
@@ -58,8 +60,8 @@ export function registerPlayerResource(deps: ToolDeps): void {
           _meta: {
             ui: {
               csp: {
-                connectDomains: ['blob:', 'data:'],
-                resourceDomains: ['blob:', 'data:'],
+                connectDomains: ['blob:', 'data:', vrmOrigin],
+                resourceDomains: ['blob:', 'data:', vrmOrigin],
               },
               ...(config.playerDomain ? { domain: config.playerDomain } : {}),
             },

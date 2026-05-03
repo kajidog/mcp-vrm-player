@@ -6,6 +6,7 @@ import * as z from 'zod'
 import type { PlayerUIToolContext } from '../player-ui/context.js'
 import { registerAppToolIfEnabled } from '../registration.js'
 import { createErrorResponse } from '../utils.js'
+import { getVrmModelUrl } from '../../vrm-http.js'
 import type { VrmRegistryStore } from './store.js'
 import type { VrmModel } from './types.js'
 
@@ -72,14 +73,13 @@ export function registerVrmRegistryTools(context: PlayerUIToolContext, registry:
       try {
         const model = registry.get(modelId)
         if (!model) throw new Error(`VRM not found: ${modelId}`)
-        const vrmBase64 = registry.readVrmBase64(modelId)
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
                 metadata: toMetadataPayload(model),
-                vrmBase64,
+                vrmUrl: getVrmModelUrl(config, model.id),
                 vrmMimeType: 'model/gltf-binary',
               }),
             },
@@ -100,7 +100,7 @@ export function registerVrmRegistryTools(context: PlayerUIToolContext, registry:
       description: 'Register a new VRM model. Only callable from the app UI.',
       inputSchema: {
         name: z.string().min(1).describe('Display name'),
-        speakerId: z.number().describe('Default speaker ID for this model'),
+        speakerId: z.number().describe('Speaker ID used when this VRM speaks via speak_player'),
         isDefault: z.boolean().optional().describe('Set as the global default VRM'),
         isPublic: z.boolean().optional().describe('Mark as public (reserved for future use)'),
         vrmBase64: z.string().min(1).describe('VRM/GLB file content encoded as base64'),
@@ -163,6 +163,41 @@ export function registerVrmRegistryTools(context: PlayerUIToolContext, registry:
   registerAppToolIfEnabled(
     server,
     disabledTools,
+    '_replace_vrm_binary_for_player',
+    {
+      title: 'Replace VRM Binary (Player)',
+      description: 'Replace the VRM binary for a registered model. Only callable from the app UI.',
+      inputSchema: {
+        modelId: z.string().describe('VRM model ID'),
+        vrmBase64: z.string().min(1).describe('VRM/GLB file content encoded as base64'),
+      },
+      _meta: {
+        ui: { resourceUri: playerResourceUri, visibility: ['app'] },
+      },
+    },
+    async (input: { modelId: string; vrmBase64: string }): Promise<CallToolResult> => {
+      try {
+        const model = await registry.replaceBinary(input.modelId, input.vrmBase64)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                vrm: toMetadataPayload(model),
+                vrmUrl: getVrmModelUrl(config, model.id),
+              }),
+            },
+          ],
+        }
+      } catch (error) {
+        return createErrorResponse(error)
+      }
+    }
+  )
+
+  registerAppToolIfEnabled(
+    server,
+    disabledTools,
     '_delete_vrm_for_player',
     {
       title: 'Delete VRM (Player)',
@@ -207,7 +242,7 @@ export function registerVrmRegistryTools(context: PlayerUIToolContext, registry:
                 text: JSON.stringify({
                   source: 'registry',
                   metadata: toMetadataPayload(defaultModel),
-                  vrmBase64: registry.readVrmBase64(defaultModel.id),
+                  vrmUrl: getVrmModelUrl(config, defaultModel.id),
                   vrmMimeType: 'model/gltf-binary',
                 }),
               },

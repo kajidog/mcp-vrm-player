@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { isNodejs, launchServer, setSessionConfig } from '@kajidog/mcp-core'
 import { getConfig, getConfigTemplate, getHelpText } from './config.js'
 import { createServer, server } from './server.js'
+import { registerVrmHttpRoutes } from './vrm-http.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -140,6 +141,9 @@ async function startMCPServer(): Promise<void> {
     serverFactory: createServer,
     httpOptions: {
       extraCorsHeaders: ['X-TTS-Speaker'],
+      configureApp: (app) => {
+        registerVrmHttpRoutes(app, config)
+      },
       onSessionInitialized: (sessionId, request) => {
         // X-TTS-Speaker ヘッダーからセッションのデフォルト話者を設定
         const speakerHeader = request.headers.get('X-TTS-Speaker')

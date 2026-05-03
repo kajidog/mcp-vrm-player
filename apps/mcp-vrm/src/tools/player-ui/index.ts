@@ -2,6 +2,7 @@ import type { ToolDeps } from '../types.js'
 import { registerVrmRegistryTools } from '../vrm-registry/tools.js'
 import { createPlayerUIToolContext } from './context.js'
 import { registerPlayerSpeakerTools } from './speaker-tools.js'
+import { registerTestSpeakTools } from './test-speak-tools.js'
 import type { PlayerUIShared } from './types.js'
 
 export type { PlayerUIShared } from './types.js'
@@ -12,5 +13,6 @@ export function registerPlayerUITools(deps: ToolDeps, shared: PlayerUIShared): v
 
   // UIから呼ばれるツール群を機能単位で登録。
   registerPlayerSpeakerTools(context)
+  registerTestSpeakTools(context)
   registerVrmRegistryTools(context, shared.vrmRegistry)
 }

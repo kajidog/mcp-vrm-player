@@ -122,6 +122,23 @@ export class VrmRegistryStore {
     return next
   }
 
+  async replaceBinary(id: string, vrmBase64: string): Promise<VrmModel> {
+    const existing = this.registry.get(id)
+    if (!existing) throw new Error(`VRM not found: ${id}`)
+
+    const buffer = decodeAndValidateVrmBase64(vrmBase64)
+    await this.writeBinaryAtomic(existing.vrmFilePath, buffer)
+
+    const next: VrmModel = {
+      ...existing,
+      vrmSizeBytes: buffer.byteLength,
+      updatedAt: Date.now(),
+    }
+    this.registry.set(id, next)
+    this.scheduleSave()
+    return next
+  }
+
   async delete(id: string): Promise<void> {
     const existing = this.registry.get(id)
     if (!existing) return

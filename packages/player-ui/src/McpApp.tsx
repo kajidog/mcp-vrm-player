@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
 import { useVrmPlayerApp } from './features/vrm-player/hooks/useVrmPlayerApp'
 import { VrmListView } from './features/vrm-registry/VrmListView'
+import { VrmRegisterView } from './features/vrm-registry/VrmRegisterView'
 
-// Phase 2 では player ↔ list の往復だけ。register / edit は Phase 3 で実装。
 type View = 'player' | 'list' | 'register' | 'edit'
 
 function LoadingView({ label }: { label: string }) {
@@ -24,30 +24,9 @@ function ErrorView({ message }: { message: string }) {
   )
 }
 
-// Phase 3 で実装する登録 / 編集画面のスタブ。今は「戻る」だけ提供しておく。
-function ComingSoonView({ label, onBack }: { label: string; onBack: () => void }) {
-  return (
-    <div className="space-y-3 p-3">
-      <div className="flex items-center justify-between rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
-        >
-          ← 一覧に戻る
-        </button>
-        <div className="text-sm font-semibold text-[var(--ui-text)]">{label}</div>
-        <div className="w-12" />
-      </div>
-      <div className="rounded-xl border border-dashed border-[var(--ui-border)] bg-[var(--ui-surface)] p-6 text-center text-sm text-[var(--ui-text-secondary)]">
-        この画面は Phase 3 で実装予定です。
-      </div>
-    </div>
-  )
-}
-
 export function McpApp() {
   const [view, setView] = useState<View>('player')
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
   const player = useVrmPlayerApp()
 
   if (player.status === 'connecting') {
@@ -65,18 +44,30 @@ export function McpApp() {
       <VrmListView
         app={player.app}
         onBack={() => setView('player')}
-        onAdd={() => setView('register')}
-        onEdit={() => setView('edit')}
+        onAdd={() => {
+          setEditingModelId(null)
+          setView('register')
+        }}
+        onEdit={(modelId) => {
+          setEditingModelId(modelId)
+          setView('edit')
+        }}
       />
     )
   }
 
-  if (view === 'register') {
-    return <ComingSoonView label="VRM を追加" onBack={() => setView('list')} />
-  }
-
-  if (view === 'edit') {
-    return <ComingSoonView label="VRM を編集" onBack={() => setView('list')} />
+  if (view === 'register' || view === 'edit') {
+    return (
+      <VrmRegisterView
+        app={player.app}
+        modelId={view === 'edit' ? editingModelId : null}
+        onBack={() => setView('list')}
+        onSaved={() => {
+          setEditingModelId(null)
+          setView('list')
+        }}
+      />
+    )
   }
 
   if (player.status === 'error') {

@@ -63,7 +63,7 @@ export function VRMScene({ source, onError }: VRMSceneProps) {
       onErrorRef.current(error instanceof Error ? error.message : String(error))
     }
 
-    if (source.data) {
+    const parseArrayBuffer = (data: ArrayBuffer) => {
       // MCP Apps の sandbox では ImageBitmapLoader が内部で blob: fetch を使い、
       // 埋め込みテクスチャ読み込みに失敗することがある。GLTFLoader はこのプロパティの
       // 有無を `parse` 内で同期的に判定するため、parse 呼び出し中だけ undefined に
@@ -71,12 +71,38 @@ export function VRMScene({ source, onError }: VRMSceneProps) {
       const originalCreateImageBitmap = globalThis.createImageBitmap
       try {
         globalThis.createImageBitmap = undefined as unknown as typeof globalThis.createImageBitmap
-        loader.parse(source.data, '', handleLoaded, handleError)
+        loader.parse(data, '', handleLoaded, handleError)
       } finally {
         globalThis.createImageBitmap = originalCreateImageBitmap
       }
+    }
+
+    if (source.data) {
+      parseArrayBuffer(source.data)
     } else if (source.src) {
-      loader.load(source.src, handleLoaded, undefined, handleError)
+      const controller = new AbortController()
+      fetch(source.src, { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`VRM の取得に失敗しました: ${response.status} ${response.statusText}`)
+          }
+          return response.arrayBuffer()
+        })
+        .then((data) => {
+          if (!disposed) parseArrayBuffer(data)
+        })
+        .catch((error: unknown) => {
+          if (disposed || (error instanceof DOMException && error.name === 'AbortError')) return
+          handleError(error)
+        })
+
+      return () => {
+        disposed = true
+        controller.abort()
+        if (current) {
+          VRMUtils.deepDispose(current.scene)
+        }
+      }
     } else {
       onErrorRef.current('VRM データがありません。')
     }

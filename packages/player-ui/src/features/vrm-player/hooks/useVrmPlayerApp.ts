@@ -17,6 +17,21 @@ function extractErrorMessage(result: CallToolResult): string {
   return text?.type === 'text' ? text.text : 'Unknown error'
 }
 
+function isPlayerToolResult(result: CallToolResult): boolean {
+  const structured = result.structuredContent as Record<string, unknown> | undefined
+  const meta = (result as { _meta?: Record<string, unknown> })._meta
+  return Boolean(
+    structured?.viewUUID ||
+      structured?.segments ||
+      structured?.vrmBase64 ||
+      structured?.vrmResourceUri ||
+      meta?.viewUUID ||
+      meta?.segments ||
+      meta?.vrmBase64 ||
+      meta?.vrmResourceUri
+  )
+}
+
 /**
  * MCP App としての接続を確立し、ツール入出力に応じて VRM の表示状態を管理する。
  *
@@ -140,7 +155,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
           return
         }
 
-        await applyPayload(extractPayloadFromResult(result), 'ready')
+        const payload = extractPayloadFromResult(result)
+        if (!payload && !isPlayerToolResult(result)) {
+          return
+        }
+
+        await applyPayload(payload, 'ready')
       }
 
       createdApp.ontoolcancelled = () => {

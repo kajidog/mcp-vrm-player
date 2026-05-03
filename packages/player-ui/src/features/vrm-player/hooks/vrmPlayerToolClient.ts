@@ -42,12 +42,14 @@ export async function fetchDefaultVrmOnServer(app: App): Promise<VrmPayload | nu
 
   const parsed = JSON.parse(payload) as {
     source?: 'registry' | 'config' | 'none'
+    vrmUrl?: string
     vrmBase64?: string
     vrmMimeType?: string
   }
 
-  if (parsed.source === 'none' || !parsed.vrmBase64) return null
+  if (parsed.source === 'none' || (!parsed.vrmUrl && !parsed.vrmBase64)) return null
   return {
+    vrmUrl: parsed.vrmUrl,
     vrmBase64: parsed.vrmBase64,
     vrmMimeType: parsed.vrmMimeType ?? 'model/gltf-binary',
   }

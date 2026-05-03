@@ -30,3 +30,7 @@ export interface UpdateVrmRequest {
   isDefault?: boolean
   isPublic?: boolean
 }
+
+export interface ReplaceVrmBinaryRequest {
+  vrmBase64: string
+}

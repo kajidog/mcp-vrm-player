@@ -1,7 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RegisterVrmRequest, UpdateVrmRequest, VrmMetadata } from '../types'
+import type { RegisterVrmRequest, ReplaceVrmBinaryRequest, UpdateVrmRequest, VrmMetadata } from '../types'
 
 interface TextContent {
   type: 'text'
@@ -30,6 +30,7 @@ export interface UseVrmRegistry {
   refresh: () => Promise<void>
   register: (input: RegisterVrmRequest) => Promise<VrmMetadata>
   update: (modelId: string, fields: UpdateVrmRequest) => Promise<VrmMetadata>
+  replaceBinary: (modelId: string, input: ReplaceVrmBinaryRequest) => Promise<VrmMetadata>
   remove: (modelId: string) => Promise<void>
   setDefault: (modelId: string) => Promise<VrmMetadata>
 }
@@ -110,6 +111,21 @@ export function useVrmRegistry(app: App | null): UseVrmRegistry {
     [refresh]
   )
 
+  const replaceBinary = useCallback(
+    async (modelId: string, input: ReplaceVrmBinaryRequest): Promise<VrmMetadata> => {
+      const currentApp = appRef.current
+      if (!currentApp) throw new Error('App is not ready')
+      const result = await currentApp.callServerTool({
+        name: '_replace_vrm_binary_for_player',
+        arguments: { modelId, ...input },
+      })
+      const parsed = parseToolJson<{ vrm: VrmMetadata }>(result)
+      await refresh()
+      return parsed.vrm
+    },
+    [refresh]
+  )
+
   const setDefault = useCallback(
     (modelId: string) => update(modelId, { isDefault: true }),
     [update]
@@ -121,5 +137,5 @@ export function useVrmRegistry(app: App | null): UseVrmRegistry {
     }
   }, [app, refresh])
 
-  return { vrms, loading, error, refresh, register, update, remove, setDefault }
+  return { vrms, loading, error, refresh, register, update, replaceBinary, remove, setDefault }
 }

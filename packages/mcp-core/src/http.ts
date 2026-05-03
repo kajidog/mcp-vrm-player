@@ -35,6 +35,8 @@ export interface CreateHttpAppOptions {
   onSessionInitialized?: (sessionId: string, request: Request) => void
   /** セッション終了時のコールバック */
   onSessionClosed?: (sessionId: string) => void
+  /** MCP 以外のHTTPルートを追加するための拡張フック */
+  configureApp?: (app: Hono) => void
 }
 
 /**
@@ -161,7 +163,15 @@ function validateApiKey(config: BaseServerConfig) {
  * @returns 設定済みのHonoアプリケーション
  */
 export function createHttpApp(options: CreateHttpAppOptions): Hono {
-  const { server, config, serverFactory, extraCorsHeaders = [], onSessionInitialized, onSessionClosed } = options
+  const {
+    server,
+    config,
+    serverFactory,
+    extraCorsHeaders = [],
+    onSessionInitialized,
+    onSessionClosed,
+    configureApp,
+  } = options
 
   // セッションごとのtransportを管理
   const transports: Map<string, WebStandardStreamableHTTPServerTransport> = new Map()
@@ -254,6 +264,8 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono {
 
   // アプリケーションのセットアップ
   const app: Hono = new Hono()
+
+  configureApp?.(app)
 
   // CORSを設定
   const allowHeaders = [
