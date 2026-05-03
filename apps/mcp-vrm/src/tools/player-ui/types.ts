@@ -1,4 +1,5 @@
 import type { AccentPhrase, AudioQuery, TtsEngine } from '@kajidog/tts-client'
+import type { VrmRegistryStore } from '../vrm-registry/store.js'
 
 export type SynthesizeResult = {
   audioBase64: string
@@ -56,4 +57,5 @@ export interface PlayerUIShared {
   setSessionState: (key: string, state: PlayerSessionState) => void
   getSessionState: (key: string) => PlayerSessionState | undefined
   getSpeakerList: () => Promise<SpeakerEntry[]>
+  vrmRegistry: VrmRegistryStore
 }

@@ -1,6 +1,7 @@
 import type { AccentPhrase, AudioQuery } from '@kajidog/tts-client'
 import type { TtsEngine } from '@kajidog/tts-client'
 import type { ToolDeps } from '../types.js'
+import { VrmRegistryStore } from '../vrm-registry/store.js'
 import { AudioCacheStore, createAudioCacheKey } from './audio-cache.js'
 import { getPlayerDictionaryRevision } from './dictionary-revision.js'
 import type { PlayerSessionState } from './session-state.js'
@@ -51,6 +52,7 @@ export interface PlayerRuntime {
   setSessionState: (key: string, state: PlayerSessionState) => void
   getSessionState: (viewUUID: string | undefined, sessionId: string | undefined) => PlayerSessionState | undefined
   getSessionStateByKey: (key: string) => PlayerSessionState | undefined
+  vrmRegistry: VrmRegistryStore
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ export interface PlayerRuntime {
 
 let audioCacheStore: AudioCacheStore | null = null
 let sessionStateStore: SessionStateStore | null = null
+let vrmRegistryStore: VrmRegistryStore | null = null
 let speakerCache: SpeakerEntry[] | null = null
 
 export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
@@ -71,9 +74,13 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
   if (!sessionStateStore) {
     sessionStateStore = new SessionStateStore(config, audioCacheStore.getDir())
   }
+  if (!vrmRegistryStore) {
+    vrmRegistryStore = new VrmRegistryStore({ cacheDir: audioCacheStore.getDir() })
+  }
 
   const cache = audioCacheStore
   const sessionState = sessionStateStore
+  const vrmRegistry = vrmRegistryStore
   const playerEngine = engine
 
   const getSpeakerList = async () => {
@@ -244,5 +251,6 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
     setSessionState: (key, state) => sessionState.set(key, state),
     getSessionState: (viewUUID, sessionId) => sessionState.get(viewUUID, sessionId),
     getSessionStateByKey: (key) => sessionState.getByKey(key),
+    vrmRegistry,
   }
 }

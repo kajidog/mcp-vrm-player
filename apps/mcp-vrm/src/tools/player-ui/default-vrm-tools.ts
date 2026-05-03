@@ -15,7 +15,7 @@ function resolveDefaultVrmPath(configuredPath: string): string | null {
 export function registerPlayerDefaultVrmTools(context: PlayerUIToolContext): void {
   const { deps, shared } = context
   const { server, disabledTools, config } = deps
-  const { playerResourceUri } = shared
+  const { playerResourceUri, vrmRegistry } = shared
 
   registerAppToolIfEnabled(
     server,
@@ -33,6 +33,22 @@ export function registerPlayerDefaultVrmTools(context: PlayerUIToolContext): voi
     },
     async (): Promise<CallToolResult> => {
       try {
+        const defaultModel = vrmRegistry?.getDefault()
+        if (defaultModel) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  vrmBase64: vrmRegistry?.readVrmBase64(defaultModel.id) ?? '',
+                  vrmMimeType: 'model/gltf-binary',
+                  sourcePath: defaultModel.vrmFilePath,
+                }),
+              },
+            ],
+          }
+        }
+
         const filePath = resolveDefaultVrmPath(config.playerDefaultVrmPath)
         if (!filePath) {
           return {

@@ -6,9 +6,34 @@
  */
 export const TOOL_GROUPS: Record<string, string[]> = {
   /** All player UI tools */
-  player: ['speak_player', 'resynthesize_player', 'get_player_state'],
+  player: ['speak_player', 'resynthesize_player', 'get_player_state', 'open_dictionary_ui'],
+  /** Dictionary read/write tools kept for backward-compatible --disable-groups handling */
+  dictionary: [
+    'get_accent_phrases',
+    'get_user_dictionary',
+    'add_user_dictionary_word',
+    'update_user_dictionary_word',
+    'delete_user_dictionary_word',
+    'add_user_dictionary_words',
+    'update_user_dictionary_words',
+  ],
+  /** File synthesis tools kept for backward-compatible --disable-groups handling */
+  file: ['synthesize_file'],
   /** MCP App tools (tools registered as UI apps, i.e. with registerAppTool) */
-  apps: ['speak_player', 'resynthesize_player'],
+  apps: [
+    'speak_player',
+    'resynthesize_player',
+    'open_dictionary_ui',
+    '_get_speakers_for_player',
+    '_get_speaker_icon_for_player',
+    '_get_default_vrm_for_player',
+    '_list_vrms_for_player',
+    '_get_vrm_for_player',
+    '_register_vrm_for_player',
+    '_update_vrm_for_player',
+    '_delete_vrm_for_player',
+    '_resolve_default_vrm_for_player',
+  ],
 }
 
 /**

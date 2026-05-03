@@ -20,5 +20,6 @@ export function registerPlayerTools(deps: ToolDeps): void {
     setSessionState: runtime.setSessionState,
     getSessionState: runtime.getSessionStateByKey,
     getSpeakerList: runtime.getSpeakerList,
+    vrmRegistry: runtime.vrmRegistry,
   })
 }
