@@ -1,6 +1,7 @@
-import { type VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
+import { type VRM, VRMHumanBoneName, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
+import { Vector3 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DEFAULT_POSE_ID, POSE_PRESETS, type PosePresetId } from '../../poses/presets'
 import type { VrmSource } from '../types'
@@ -10,13 +11,15 @@ interface VRMSceneProps {
   onError: (message: string) => void
   // 指定されたプリセット（idle, wave 等）を毎フレーム適用する。未指定時は idle（呼吸）。
   pose?: PosePresetId
+  // VRM ロード完了後、Canvas へ「キャラ上半身付近の y」を通知する。
+  onCenterReady?: (y: number) => void
 }
 
 /**
  * 渡された VrmSource を three.js シーンに常駐表示するコンポーネント。
  * `source.data`（バイナリ）か `source.src`（URL）のいずれかからロードする。
  */
-export function VRMScene({ source, onError, pose }: VRMSceneProps) {
+export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps) {
   const [vrm, setVrm] = useState<VRM | null>(null)
   // 経過時間（idle の呼吸など、時刻ベースの揺らぎに使う）。useFrame の delta を加算する。
   const elapsedRef = useRef(0)
@@ -26,11 +29,16 @@ export function VRMScene({ source, onError, pose }: VRMSceneProps) {
     poseRef.current = pose ?? DEFAULT_POSE_ID
   }, [pose])
 
-  // onError を ref 経由で参照し、コールバック差し替えで useEffect が再実行されないようにする。
+  // onError / onCenterReady を ref 経由で参照し、コールバック差し替えで useEffect が再実行されないようにする。
   const onErrorRef = useRef(onError)
   useEffect(() => {
     onErrorRef.current = onError
   }, [onError])
+
+  const onCenterReadyRef = useRef(onCenterReady)
+  useEffect(() => {
+    onCenterReadyRef.current = onCenterReady
+  }, [onCenterReady])
 
   useEffect(() => {
     let disposed = false
@@ -66,6 +74,22 @@ export function VRMScene({ source, onError, pose }: VRMSceneProps) {
       loaded.update(0)
       current = loaded
       setVrm(loaded)
+
+      // カメラ初期位置を上半身寄りにするための y を Canvas 側へ通知する。
+      // Chest が無いモデルもあるので Spine→Head の順でフォールバック。
+      // VRM の root を (0,-1,0) に置いているため world y も同じ平行移動を加味して報告する。
+      const upperBoneNode =
+        loaded.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Chest) ??
+        loaded.humanoid.getNormalizedBoneNode(VRMHumanBoneName.UpperChest) ??
+        loaded.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Spine) ??
+        loaded.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Head) ??
+        null
+      if (upperBoneNode) {
+        const world = new Vector3()
+        upperBoneNode.getWorldPosition(world)
+        // primitive の position=[0,-1,0] による平行移動を反映。
+        onCenterReadyRef.current?.(world.y - 1)
+      }
     }
 
     const handleError = (error: unknown) => {

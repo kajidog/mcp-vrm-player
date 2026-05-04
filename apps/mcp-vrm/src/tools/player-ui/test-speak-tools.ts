@@ -61,4 +61,57 @@ export function registerTestSpeakTools(context: PlayerUIToolContext): void {
       }
     }
   )
+
+  // モデル切替時に既存セグメントを新しい話者で再合成するための内部ツール。
+  registerAppToolIfEnabled(
+    server,
+    disabledTools,
+    '_resynthesize_for_player',
+    {
+      title: 'Resynthesize Segment (Player)',
+      description:
+        'Synthesize a single segment for the given text/speaker/speedScale. Used when the player swaps the displayed VRM and needs to re-render audio with the new speaker.',
+      inputSchema: {
+        speakerId: z.number().describe('Speaker ID to use for synthesis'),
+        text: z.string().min(1).describe('Text to synthesize'),
+        speedScale: z.number().optional().describe('Playback speed scale (defaults to server default)'),
+      },
+      _meta: {
+        ui: { resourceUri: playerResourceUri, visibility: ['app'] },
+      },
+    },
+    async ({
+      speakerId,
+      text,
+      speedScale,
+    }: {
+      speakerId: number
+      text: string
+      speedScale?: number
+    }): Promise<CallToolResult> => {
+      try {
+        const result = await synthesizeWithCache({
+          text,
+          speaker: speakerId,
+          speedScale: speedScale ?? config.defaultSpeedScale,
+        })
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                audioBase64: result.audioBase64,
+                audioMimeType: 'audio/wav',
+                text,
+                speakerId,
+                speakerName: result.speakerName,
+              }),
+            },
+          ],
+        }
+      } catch (error) {
+        return createErrorResponse(error)
+      }
+    }
+  )
 }

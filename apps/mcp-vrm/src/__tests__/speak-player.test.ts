@@ -60,9 +60,13 @@ function buildHarness(registry: VrmRegistryStore) {
       return map
     },
     getUserDictionaryWords: async () => [],
-    synthesizeWithCache: async () => {
-      throw new Error('synthesizeWithCache should not be called in speak_player tests')
-    },
+    synthesizeWithCache: async ({ text, speaker, speedScale }) => ({
+      audioBase64: `audio-for-${speaker}-${text}`,
+      text,
+      speaker,
+      speakerName: `Speaker ${speaker}`,
+      speedScale,
+    }),
     setSessionState: (key, state) => sessionStates.set(key, state),
     getSessionState: (viewUUID, sessionId) => sessionStates.get(viewUUID ?? sessionId ?? 'global'),
     getSessionStateByKey: (key) => sessionStates.get(key),
@@ -117,12 +121,13 @@ describe('speak_player Phase 5', () => {
 
     expect(result.isError).toBeUndefined()
     const structured = result.structuredContent as {
-      vrmModel?: { id: string; name: string; vrmUrl: string }
+      vrmModel?: { id: string; name: string; speakerId: number; vrmUrl: string }
       segments: Array<{ text: string; speaker: number; pose?: string; speedScale: number }>
     }
     expect(structured.vrmModel).toEqual({
       id: model.id,
       name: 'Alice',
+      speakerId: 7,
       vrmUrl: `http://localhost:8765/vrms/${model.id}.vrm`,
     })
     expect(structured.segments).toHaveLength(2)

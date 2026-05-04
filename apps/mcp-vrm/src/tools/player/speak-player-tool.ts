@@ -87,6 +87,23 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
         const speakerNameMap = await runtime.resolveSpeakerNames([model.speakerId])
         const viewUUID = randomUUID()
 
+        // 各セグメントを並列合成。失敗したセグメントは text のみ残し、UI側で順次フォールバック表示する。
+        const synthesized = await Promise.all(
+          baseSegments.map(async (s) => {
+            try {
+              const result = await runtime.synthesizeWithCache({
+                text: s.text,
+                speaker: s.speaker,
+                speedScale: s.speedScale,
+              })
+              return { audioBase64: result.audioBase64 as string | undefined }
+            } catch (error) {
+              console.warn('[speak_player] synthesize failed for segment:', error)
+              return { audioBase64: undefined }
+            }
+          })
+        )
+
         const nextState = {
           segments: baseSegments.map((s) => ({
             text: s.text,
@@ -101,23 +118,26 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
 
         const fullText = baseSegments.map((s) => s.text).join(' ')
         const textPreview = fullText.slice(0, 60) + (fullText.length > 60 ? '...' : '')
-        const uiSegments = baseSegments.map((s) => ({
+        const uiSegments = baseSegments.map((s, index) => ({
           text: s.text,
           speaker: s.speaker,
           speakerName: speakerNameMap.get(s.speaker),
           speedScale: s.speedScale,
           ...(s.pose !== undefined ? { pose: s.pose } : {}),
+          ...(synthesized[index].audioBase64 ? { audioBase64: synthesized[index].audioBase64 } : {}),
         }))
         const structured: Record<string, unknown> = {
           viewUUID,
           autoPlay: config.autoPlay,
           segments: uiSegments,
+          audioMimeType: 'audio/wav',
           engineId: engine.id,
           engineDisplayName: engine.displayName,
           capabilities,
           vrmModel: {
             id: model.id,
             name: model.name,
+            speakerId: model.speakerId,
             vrmUrl: getVrmModelUrl(config, model.id),
           },
         }

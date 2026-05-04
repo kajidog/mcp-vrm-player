@@ -3,14 +3,13 @@
 export type VrmPlayerStatus = 'connecting' | 'waiting' | 'ready' | 'error'
 
 // 解決済みの VRM ソース。url 経由なら src、バイナリ展開済みなら data を持つ。
-// isDefault / isLocal はモデルエラー時のフォールバック判断に使う。
+// isDefault はモデルエラー時のフォールバック判断に使う。
 export interface VrmSource {
   src?: string
   data?: ArrayBuffer
   label: string
   note?: string
   isDefault?: boolean
-  isLocal?: boolean
 }
 
 // MCP ツール入出力に含まれる VRM ペイロードの想定スキーマ。
@@ -28,6 +27,8 @@ export interface VrmPayload {
   modelResourceUri?: string
 }
 
+import type { PoseSegment } from './utils/vrmPayload'
+
 // useVrmPlayerApp が公開するビュー向け状態と操作。
 // `app` はサーバー向けツール呼び出しが必要な兄弟ビュー（VRM 一覧画面など）に
 // 共有するためのハンドル。確立前は null。
@@ -39,8 +40,16 @@ export interface VrmPlayerState {
   isReadyForDisplay: boolean
   app: import('@modelcontextprotocol/ext-apps').App | null
   // 直近の speak_player 呼び出しで指示された現在のポーズID（idle 等）。未指定時は undefined。
-  // 複数セグメントの場合は推定時間で順番に切替わる。
   pose: string | undefined
-  loadLocalVrmFile: (file: File) => Promise<void>
+  // 直近の speak_player 結果から取り出した全セグメント。再生されていなければ空配列。
+  segments: PoseSegment[]
+  // 現在再生中のセグメントの index（再生していないときは null）。
+  currentSegmentIndex: number | null
+  // 吹き出し表示用に切り出した「現在再生中のセグメントのテキスト」。
+  currentSegmentText: string | null
+  // 現在表示している登録モデル情報（モデル切替で更新）。
+  activeModel: { id: string; name: string; speakerId: number } | null
+  // 表示モデルを別の登録モデルへ切替し、必要なら現セグメントを新 speaker で再合成する。
+  switchVrm: (modelId: string) => Promise<void>
   setModelError: (message: string) => void
 }

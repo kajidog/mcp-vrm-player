@@ -283,14 +283,12 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
         src: existingVrmUrl,
         label: vrmFileName ?? '登録済み VRM',
         note: '登録済み VRM をプレビュー中',
-        isLocal: true,
       }
     : vrmBuffer
       ? {
           data: vrmBuffer,
           label: vrmFileName ?? 'VRM',
           note: 'プレビュー中',
-          isLocal: true,
         }
       : null
 
@@ -441,7 +439,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
         {previewError ? <div className="text-xs text-red-600">{previewError}</div> : null}
         {previewSource ? (
           <>
-            <VRMCanvas source={previewSource} onError={setPreviewError} pose={previewPose} />
+            <VRMCanvas source={previewSource} onError={setPreviewError} pose={previewPose} speechText={null} />
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
               <span className="font-semibold text-[var(--ui-text)]">ポーズ確認</span>
               <select

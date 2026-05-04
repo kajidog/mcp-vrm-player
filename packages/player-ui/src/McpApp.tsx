@@ -76,10 +76,13 @@ export function McpApp() {
 
   return (
     <VRMPlayer
+      app={player.app}
       source={player.source}
       loadingModel={player.loadingModel}
       pose={player.pose}
-      onLocalFile={player.loadLocalVrmFile}
+      speechText={player.currentSegmentText}
+      activeModelId={player.activeModel?.id ?? null}
+      onSwitchVrm={player.switchVrm}
       onModelError={player.setModelError}
       onOpenMenu={() => setView('list')}
     />

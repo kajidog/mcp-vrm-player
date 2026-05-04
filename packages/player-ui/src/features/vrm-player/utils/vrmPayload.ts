@@ -98,6 +98,8 @@ export interface PoseSegment {
   pose?: string
   text: string
   speedScale?: number
+  audioBase64?: string
+  speaker?: number
 }
 
 function pickPoseSegments(source: unknown): PoseSegment[] | null {
@@ -113,6 +115,8 @@ function pickPoseSegments(source: unknown): PoseSegment[] | null {
       text,
       pose: readString(segment, 'pose'),
       speedScale: typeof segment.speedScale === 'number' ? segment.speedScale : undefined,
+      audioBase64: readString(segment, 'audioBase64'),
+      speaker: typeof segment.speaker === 'number' ? segment.speaker : undefined,
     })
   }
   return result.length > 0 ? result : null

@@ -54,3 +54,67 @@ export async function fetchDefaultVrmOnServer(app: App): Promise<VrmPayload | nu
     vrmMimeType: parsed.vrmMimeType ?? 'model/gltf-binary',
   }
 }
+
+/**
+ * モデル切替時に既存テキストを新しい話者で再合成する。
+ * `_resynthesize_for_player` が無効化されている環境では呼び出し失敗するので例外送出。
+ */
+export async function resynthesizeSegmentOnServer(
+  app: App,
+  args: { speakerId: number; text: string; speedScale?: number }
+): Promise<{ audioBase64: string; audioMimeType: string }> {
+  const result = await app.callServerTool({
+    name: '_resynthesize_for_player',
+    arguments: args,
+  })
+  assertNoToolError(result)
+
+  const payload = getTextPayload(result.content)
+  if (!payload) throw new Error('Tool returned no text content')
+  const parsed = JSON.parse(payload) as { audioBase64?: string; audioMimeType?: string }
+  if (!parsed.audioBase64) throw new Error('audioBase64 missing in response')
+  return { audioBase64: parsed.audioBase64, audioMimeType: parsed.audioMimeType ?? 'audio/wav' }
+}
+
+interface VrmListEntry {
+  id: string
+  name: string
+  speakerId: number
+  isDefault?: boolean
+}
+
+/** 登録済み VRM 一覧の軽量取得（プレイヤー上のモデルピッカー用）。 */
+export async function fetchVrmListOnServer(app: App): Promise<VrmListEntry[]> {
+  const result = await app.callServerTool({
+    name: '_list_vrms_for_player',
+    arguments: {},
+  })
+  assertNoToolError(result)
+
+  const payload = getTextPayload(result.content)
+  if (!payload) return []
+  try {
+    const parsed = JSON.parse(payload) as { vrms?: VrmListEntry[] }
+    return Array.isArray(parsed.vrms) ? parsed.vrms : []
+  } catch {
+    return []
+  }
+}
+
+/** 指定モデルの VRM URL を取得する。 */
+export async function fetchVrmModelOnServer(
+  app: App,
+  modelId: string
+): Promise<{ metadata: VrmListEntry; vrmUrl: string }> {
+  const result = await app.callServerTool({
+    name: '_get_vrm_for_player',
+    arguments: { modelId },
+  })
+  assertNoToolError(result)
+
+  const payload = getTextPayload(result.content)
+  if (!payload) throw new Error('Tool returned no text content')
+  const parsed = JSON.parse(payload) as { metadata?: VrmListEntry; vrmUrl?: string }
+  if (!parsed.metadata || !parsed.vrmUrl) throw new Error('Invalid VRM metadata response')
+  return { metadata: parsed.metadata, vrmUrl: parsed.vrmUrl }
+}

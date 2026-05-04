@@ -27,6 +27,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
     '_get_speakers_for_player',
     '_get_speaker_icon_for_player',
     '_test_speak_for_player',
+    '_resynthesize_for_player',
     '_list_vrms_for_player',
     '_get_vrm_for_player',
     '_register_vrm_for_player',
