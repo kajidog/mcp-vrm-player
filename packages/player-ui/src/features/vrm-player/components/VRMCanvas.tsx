@@ -17,7 +17,10 @@ interface VRMCanvasProps {
   pose?: PosePresetId
   // 吹き出しに出すテキスト。null のときは吹き出しを描画しない。
   speechText: string | null
+  hasSegments?: boolean
   fullscreen?: boolean
+  onPrev?: () => void
+  onNext?: () => void
 }
 
 const SCENE_COLORS = {
@@ -69,11 +72,103 @@ function CenterController({
   return null
 }
 
+function WheelTrackController({
+  controlsRef,
+  hasSegments,
+  onPrev,
+  onNext,
+}: {
+  controlsRef: React.RefObject<OrbitControlsImpl | null>
+  hasSegments: boolean
+  onPrev: () => void
+  onNext: () => void
+}) {
+  const { camera, gl } = useThree()
+  const middleDragRef = useRef<{ active: boolean; lastY: number }>({ active: false, lastY: 0 })
+  const lastWheelSwitchRef = useRef(0)
+
+  useEffect(() => {
+    const dom = gl.domElement
+
+    const zoomByDelta = (deltaY: number) => {
+      const controls = controlsRef.current
+      if (!controls) return
+      const target = controls.target
+      const direction = camera.position.clone().sub(target)
+      const distance = direction.length()
+      if (distance <= 0) return
+      const nextDistance = Math.min(8, Math.max(0.45, distance * (1 + deltaY * 0.004)))
+      camera.position.copy(target).add(direction.normalize().multiplyScalar(nextDistance))
+      controls.update()
+    }
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      if (event.shiftKey) {
+        zoomByDelta(event.deltaY)
+        return
+      }
+      if (!hasSegments || middleDragRef.current.active) return
+      const now = Date.now()
+      if (now - lastWheelSwitchRef.current < 200) return
+      lastWheelSwitchRef.current = now
+      if (event.deltaY > 0) onNext()
+      else if (event.deltaY < 0) onPrev()
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 1) return
+      event.preventDefault()
+      middleDragRef.current = { active: true, lastY: event.clientY }
+      dom.setPointerCapture?.(event.pointerId)
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!middleDragRef.current.active) return
+      event.preventDefault()
+      const dy = event.clientY - middleDragRef.current.lastY
+      middleDragRef.current.lastY = event.clientY
+      zoomByDelta(dy)
+    }
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (!middleDragRef.current.active) return
+      event.preventDefault()
+      middleDragRef.current = { active: false, lastY: 0 }
+      dom.releasePointerCapture?.(event.pointerId)
+    }
+
+    dom.addEventListener('wheel', onWheel, { passive: false })
+    dom.addEventListener('pointerdown', onPointerDown)
+    dom.addEventListener('pointermove', onPointerMove)
+    dom.addEventListener('pointerup', onPointerUp)
+    dom.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      dom.removeEventListener('wheel', onWheel)
+      dom.removeEventListener('pointerdown', onPointerDown)
+      dom.removeEventListener('pointermove', onPointerMove)
+      dom.removeEventListener('pointerup', onPointerUp)
+      dom.removeEventListener('pointercancel', onPointerUp)
+    }
+  }, [camera, controlsRef, gl, hasSegments, onNext, onPrev])
+
+  return null
+}
+
 /**
  * three.js のキャンバスとシーン構成（背景・ライト・グリッド・カメラ操作）を担当。
  * モデルそのものの読み込みは `VRMScene` 側に委譲する。
  */
-export function VRMCanvas({ source, onError, pose, speechText, fullscreen = false }: VRMCanvasProps) {
+export function VRMCanvas({
+  source,
+  onError,
+  pose,
+  speechText,
+  hasSegments = false,
+  fullscreen = false,
+  onPrev = () => {},
+  onNext = () => {},
+}: VRMCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const colorScheme = useColorScheme()
   const colors = SCENE_COLORS[colorScheme]
@@ -103,9 +198,10 @@ export function VRMCanvas({ source, onError, pose, speechText, fullscreen = fals
           <gridHelper args={[6, 12, colors.gridA, colors.gridB]} position={[0, -1, 0]} />
           {source ? <VRMScene source={source} onError={onError} pose={pose} onCenterReady={setCenterY} /> : null}
           {/* 仮置き target。ロード完了後に CenterController が VRM の上半身高さに更新する。 */}
-          {/* 左ドラッグ=回転 / 右ドラッグ=パン / ホイール=ズーム（OrbitControls 標準）。 */}
-          <OrbitControls ref={controlsRef} enablePan target={[0, 1.1, 0]} />
+          {/* 左ドラッグ=回転 / 右ドラッグ=パン。ズームは WheelTrackController で割り当てる。 */}
+          <OrbitControls ref={controlsRef} enablePan enableZoom={false} target={[0, 1.1, 0]} />
           <CanvasContextMenuSuppressor />
+          <WheelTrackController controlsRef={controlsRef} hasSegments={hasSegments} onPrev={onPrev} onNext={onNext} />
           <CenterController controlsRef={controlsRef} centerY={centerY} />
           {speechText ? <SpeechBubble3D centerY={centerY} text={speechText} /> : null}
         </Canvas>

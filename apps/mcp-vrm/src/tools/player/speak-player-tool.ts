@@ -153,6 +153,8 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             name: model.name,
             speakerId: model.speakerId,
             vrmUrl: getVrmModelUrl(config, model.id),
+            ...(model.thumbnailBase64 ? { thumbnailBase64: model.thumbnailBase64 } : {}),
+            ...(model.thumbnailMimeType ? { thumbnailMimeType: model.thumbnailMimeType } : {}),
           },
         }
         return {
@@ -163,7 +165,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             },
           ],
           structuredContent: structured,
-          _meta: { viewUUID },
+          _meta: { viewUUID, autoPlay: config.autoPlay },
         }
       } catch (error) {
         return createErrorResponse(error)

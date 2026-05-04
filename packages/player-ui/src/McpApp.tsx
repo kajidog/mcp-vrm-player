@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { SettingsView } from './features/vrm-player/components/SettingsView'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
 import { useDisplayMode } from './features/vrm-player/hooks/useDisplayMode'
 import { useVrmPlayerApp } from './features/vrm-player/hooks/useVrmPlayerApp'
 import { VrmListView } from './features/vrm-registry/VrmListView'
 import { VrmRegisterView } from './features/vrm-registry/VrmRegisterView'
 
-type View = 'player' | 'list' | 'register' | 'edit'
+type View = 'player' | 'settings' | 'list' | 'register' | 'edit'
 
 function LoadingView({ label }: { label: string }) {
   return (
@@ -28,7 +29,6 @@ function ErrorView({ message }: { message: string }) {
 export function McpApp() {
   const [view, setView] = useState<View>('player')
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [listRefreshKey, setListRefreshKey] = useState(0)
   const player = useVrmPlayerApp()
   const displayMode = useDisplayMode(player.app)
@@ -76,6 +76,21 @@ export function McpApp() {
     )
   }
 
+  if (view === 'settings') {
+    return (
+      <SettingsView
+        app={player.app}
+        busy={player.loadingModel}
+        onBack={() => setView('player')}
+        onOpenModels={() => setView('list')}
+        onApplied={async () => {
+          await player.resynthesizeAll()
+          setView('player')
+        }}
+      />
+    )
+  }
+
   if (player.status === 'error') {
     return <ErrorView message={player.errorMsg} />
   }
@@ -93,7 +108,16 @@ export function McpApp() {
         isPlaying={player.isPlaying}
         canReplay={player.canReplay}
         hasSegments={player.hasSegments}
-        settingsOpen={settingsOpen}
+        currentIndex={player.currentSegmentIndex}
+        totalSegments={player.segments.length}
+        currentTime={player.currentTime}
+        duration={player.duration}
+        speakerName={
+          player.currentSegmentIndex !== null
+            ? (player.segments[player.currentSegmentIndex]?.speakerName ?? null)
+            : (player.segments[0]?.speakerName ?? null)
+        }
+        thumbnailUrl={player.activeModel?.thumbnailUrl}
         fullscreen={fullscreen}
         canFullscreen={displayMode.canFullscreen}
         onSwitchVrm={player.switchVrm}
@@ -102,9 +126,7 @@ export function McpApp() {
         onPrev={player.prev}
         onNext={player.next}
         onModelError={player.setModelError}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onCloseSettings={() => setSettingsOpen(false)}
-        onSettingsApplied={player.resynthesizeAll}
+        onOpenSettings={() => setView('settings')}
         onAddModel={() => {
           setEditingModelId(null)
           setView('register')
@@ -112,10 +134,6 @@ export function McpApp() {
         onEditModel={(modelId) => {
           setEditingModelId(modelId)
           setView('edit')
-        }}
-        onOpenModels={() => {
-          setSettingsOpen(false)
-          setView('list')
         }}
         onToggleFullscreen={() => {
           if (fullscreen) void displayMode.requestInline()

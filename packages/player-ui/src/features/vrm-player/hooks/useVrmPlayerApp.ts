@@ -54,6 +54,70 @@ function base64ToBlobUrl(base64: string, mimeType: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
 }
 
+const PLAYED_KEY_PREFIX = 'vrm-played-'
+const PLAYED_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+function readDataUrl(record: Record<string, unknown>): string | undefined {
+  if (typeof record.thumbnailUrl === 'string' && record.thumbnailUrl.trim()) return record.thumbnailUrl
+  if (typeof record.thumbnailBase64 !== 'string' || !record.thumbnailBase64.trim()) return undefined
+  const mimeType =
+    typeof record.thumbnailMimeType === 'string' && record.thumbnailMimeType.trim()
+      ? record.thumbnailMimeType
+      : 'image/png'
+  return `data:${mimeType};base64,${record.thumbnailBase64}`
+}
+
+function readToolMeta(result: CallToolResult): Record<string, unknown> {
+  const structured = result.structuredContent
+  const meta = (result as { _meta?: Record<string, unknown> })._meta
+  return {
+    ...(structured && typeof structured === 'object' ? (structured as Record<string, unknown>) : {}),
+    ...(meta && typeof meta === 'object' ? meta : {}),
+  }
+}
+
+function consumeAutoPlay(meta: Record<string, unknown>): boolean {
+  const wantedAutoPlay = meta.autoPlay !== false
+  const viewUUID = typeof meta.viewUUID === 'string' && meta.viewUUID.trim() ? meta.viewUUID : undefined
+  if (!viewUUID) return wantedAutoPlay
+
+  try {
+    const key = `${PLAYED_KEY_PREFIX}${viewUUID}`
+    const restored = localStorage.getItem(key) !== null
+    if (!restored) {
+      localStorage.setItem(key, JSON.stringify({ playedAt: Date.now() }))
+    }
+    return wantedAutoPlay && !restored
+  } catch {
+    return wantedAutoPlay
+  }
+}
+
+function cleanupPlayedKeys(): void {
+  try {
+    const now = Date.now()
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index)
+      if (!key?.startsWith(PLAYED_KEY_PREFIX)) continue
+      const raw = localStorage.getItem(key)
+      let playedAt = 0
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as { playedAt?: unknown }
+          playedAt = typeof parsed.playedAt === 'number' ? parsed.playedAt : 0
+        } catch {
+          playedAt = 0
+        }
+      }
+      if (!playedAt || now - playedAt > PLAYED_KEY_TTL_MS) {
+        localStorage.removeItem(key)
+      }
+    }
+  } catch {
+    // localStorage が使えない環境では何もしない。
+  }
+}
+
 /**
  * MCP App としての接続を確立し、ツール入出力に応じて VRM の表示状態を管理する。
  *
@@ -72,7 +136,9 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [pose, setPose] = useState<string | undefined>(undefined)
   const [segments, setSegments] = useState<PoseSegment[]>([])
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
-  const [activeModel, setActiveModel] = useState<{ id: string; name: string; speakerId: number } | null>(null)
+  const [activeModel, setActiveModel] = useState<VrmPlayerState['activeModel']>(null)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [paused, setPaused] = useState(false)
   const appRef = useRef<App | null>(null)
   // `setModelError` から「現在表示中のソース種別」を同期参照するための ref。
@@ -131,6 +197,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
       audio.load()
     }
     releaseAudioUrl()
+    setCurrentTime(0)
+    setDuration(0)
   }
 
   const schedulePoseTimer = (index: number, version: number, duration: number) => {
@@ -164,6 +232,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
 
     playbackIndexRef.current = index
     setCurrentSegmentIndex(index)
+    setCurrentTime(0)
+    setDuration(0)
     setPose(current.pose ?? 'idle')
 
     const audio = audioRef.current
@@ -192,7 +262,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
   }
 
   // 新しいセグメント列で再生を開始する。差し替えのたびに version を進めて古い callback を打ち切る。
-  const startPlayback = (next: PoseSegment[]) => {
+  const startPlayback = (next: PoseSegment[], options: { autoPlay?: boolean } = {}) => {
     stopPlayback()
     segmentsRef.current = next
     setSegments(next)
@@ -201,6 +271,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
       playbackIndexRef.current = 0
       setCurrentSegmentIndex(null)
       setPose(undefined)
+      return
+    }
+    if (options.autoPlay === false) {
+      playbackIndexRef.current = 0
+      setCurrentSegmentIndex(null)
+      setPose('idle')
       return
     }
     playSegmentAt(0, playbackVersionRef.current)
@@ -287,11 +363,22 @@ export function useVrmPlayerApp(): VrmPlayerState {
   // stopPlayback は ref ベースで closure を捕まえないので、依存配列は空で問題ない。
   // biome-ignore lint/correctness/useExhaustiveDependencies: stopPlayback uses refs only and is stable across renders
   useEffect(() => {
-    audioRef.current = new Audio()
+    const audio = new Audio()
+    const updateTime = () => setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0)
+    const updateDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    audio.addEventListener('timeupdate', updateTime)
+    audio.addEventListener('loadedmetadata', updateDuration)
+    audioRef.current = audio
     return () => {
       stopPlayback()
+      audio.removeEventListener('timeupdate', updateTime)
+      audio.removeEventListener('loadedmetadata', updateDuration)
       audioRef.current = null
     }
+  }, [])
+
+  useEffect(() => {
+    cleanupPlayedKeys()
   }, [])
 
   const setResolvedSource = (nextSource: VrmPlayerState['source']) => {
@@ -407,11 +494,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
         }
 
         // 結果に含まれる vrmModel から表示中モデル情報を更新する（モデル切替時の話者解決に使う）。
+        const meta = readToolMeta(result)
         const structured = result.structuredContent as Record<string, unknown> | undefined
         if (structured && typeof structured === 'object' && 'vrmModel' in structured) {
           const vm = structured.vrmModel as Record<string, unknown> | undefined
           if (vm && typeof vm.id === 'string' && typeof vm.name === 'string' && typeof vm.speakerId === 'number') {
-            setActiveModel({ id: vm.id, name: vm.name, speakerId: vm.speakerId })
+            setActiveModel({ id: vm.id, name: vm.name, speakerId: vm.speakerId, thumbnailUrl: readDataUrl(vm) })
           }
         }
 
@@ -419,7 +507,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         // 音声付きセグメントがあれば onended 駆動で順次再生する。
         const nextSegments = extractPoseSegmentsFromResult(result)
         if (nextSegments) {
-          startPlayback(nextSegments)
+          startPlayback(nextSegments, { autoPlay: consumeAutoPlay(meta) })
         } else if (isPlayerToolResult(result)) {
           stopPlayback()
           setSegments([])
@@ -526,7 +614,15 @@ export function useVrmPlayerApp(): VrmPlayerState {
 
       // 表示中ラベルを「登録名」で上書き（vrmUrl だと UUID しか出ないため）。
       setResolvedSource({ ...nextSource, label: metadata.name, note: 'モデルを切替えました' })
-      setActiveModel({ id: metadata.id, name: metadata.name, speakerId: metadata.speakerId })
+      setActiveModel({
+        id: metadata.id,
+        name: metadata.name,
+        speakerId: metadata.speakerId,
+        thumbnailUrl:
+          metadata.thumbnailBase64 !== undefined
+            ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
+            : undefined,
+      })
       setStatus('ready')
       setErrorMsg('')
 
@@ -550,6 +646,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
     pose,
     segments,
     currentSegmentIndex,
+    currentTime,
+    duration,
     currentSegmentText: currentSegmentIndex !== null ? (segments[currentSegmentIndex]?.text ?? null) : null,
     activeModel,
     isPlaying: currentSegmentIndex !== null && !paused,

@@ -103,6 +103,7 @@ export interface PoseSegment {
   postPhonemeLength?: number
   audioBase64?: string
   speaker?: number
+  speakerName?: string
 }
 
 function pickPoseSegments(source: unknown): PoseSegment[] | null {
@@ -123,6 +124,7 @@ function pickPoseSegments(source: unknown): PoseSegment[] | null {
       postPhonemeLength: typeof segment.postPhonemeLength === 'number' ? segment.postPhonemeLength : undefined,
       audioBase64: readString(segment, 'audioBase64'),
       speaker: typeof segment.speaker === 'number' ? segment.speaker : undefined,
+      speakerName: readString(segment, 'speakerName'),
     })
   }
   return result.length > 0 ? result : null

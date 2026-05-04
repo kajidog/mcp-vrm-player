@@ -11,6 +11,12 @@ interface PlayerHeaderProps {
   hasSegments: boolean
   isPlaying: boolean
   canReplay: boolean
+  currentIndex: number | null
+  totalSegments: number
+  currentTime: number
+  duration: number
+  speakerName: string | null
+  thumbnailUrl?: string
   fullscreen: boolean
   canFullscreen: boolean
   onSwitchVrm: (modelId: string) => void
@@ -32,6 +38,12 @@ export function PlayerHeader({
   hasSegments,
   isPlaying,
   canReplay,
+  currentIndex,
+  totalSegments,
+  currentTime,
+  duration,
+  speakerName,
+  thumbnailUrl,
   fullscreen,
   canFullscreen,
   onSwitchVrm,
@@ -59,6 +71,12 @@ export function PlayerHeader({
         isPlaying={isPlaying}
         canReplay={canReplay}
         hasSegments={hasSegments}
+        currentIndex={currentIndex}
+        totalSegments={totalSegments}
+        currentTime={currentTime}
+        duration={duration}
+        speakerName={speakerName}
+        thumbnailUrl={thumbnailUrl}
         onPlay={onPlay}
         onPause={onPause}
         onPrev={onPrev}

@@ -3,7 +3,6 @@ import type { PosePresetId } from '../../poses/presets'
 import { POSE_PRESETS } from '../../poses/presets'
 import type { VrmSource } from '../types'
 import { PlayerHeader } from './PlayerHeader'
-import { SettingsModal } from './SettingsModal'
 import { VRMCanvas } from './VRMCanvas'
 
 interface VRMPlayerProps {
@@ -17,7 +16,12 @@ interface VRMPlayerProps {
   isPlaying: boolean
   canReplay: boolean
   hasSegments: boolean
-  settingsOpen: boolean
+  currentIndex: number | null
+  totalSegments: number
+  currentTime: number
+  duration: number
+  speakerName: string | null
+  thumbnailUrl?: string
   fullscreen: boolean
   canFullscreen: boolean
   onModelError: (message: string) => void
@@ -27,11 +31,8 @@ interface VRMPlayerProps {
   onPrev: () => void
   onNext: () => void
   onOpenSettings: () => void
-  onCloseSettings: () => void
-  onSettingsApplied: () => Promise<void>
   onAddModel: () => void
   onEditModel: (modelId: string) => void
-  onOpenModels: () => void
   onToggleFullscreen: () => void
 }
 
@@ -51,7 +52,12 @@ export function VRMPlayer({
   isPlaying,
   canReplay,
   hasSegments,
-  settingsOpen,
+  currentIndex,
+  totalSegments,
+  currentTime,
+  duration,
+  speakerName,
+  thumbnailUrl,
   fullscreen,
   canFullscreen,
   onModelError,
@@ -61,11 +67,8 @@ export function VRMPlayer({
   onPrev,
   onNext,
   onOpenSettings,
-  onCloseSettings,
-  onSettingsApplied,
   onAddModel,
   onEditModel,
-  onOpenModels,
   onToggleFullscreen,
 }: VRMPlayerProps) {
   const presetPose = asPresetId(pose)
@@ -80,6 +83,12 @@ export function VRMPlayer({
         hasSegments={hasSegments}
         isPlaying={isPlaying}
         canReplay={canReplay}
+        currentIndex={currentIndex}
+        totalSegments={totalSegments}
+        currentTime={currentTime}
+        duration={duration}
+        speakerName={speakerName}
+        thumbnailUrl={thumbnailUrl}
         fullscreen={fullscreen}
         canFullscreen={canFullscreen}
         onSwitchVrm={(modelId) => {
@@ -101,16 +110,11 @@ export function VRMPlayer({
           pose={presetPose}
           speechText={speechText}
           fullscreen={fullscreen}
+          hasSegments={hasSegments}
+          onPrev={onPrev}
+          onNext={onNext}
         />
       </div>
-      <SettingsModal
-        app={app}
-        open={settingsOpen}
-        busy={loadingModel}
-        onClose={onCloseSettings}
-        onOpenModels={onOpenModels}
-        onApplied={onSettingsApplied}
-      />
     </div>
   )
 }

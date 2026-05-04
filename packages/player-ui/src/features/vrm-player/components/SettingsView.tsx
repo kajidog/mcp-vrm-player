@@ -6,23 +6,21 @@ import {
   setPlayerSettingsOnServer,
 } from '../hooks/vrmPlayerToolClient'
 
-interface SettingsModalProps {
-  app: App | null
-  open: boolean
+interface SettingsViewProps {
+  app: App
   busy: boolean
-  onClose: () => void
+  onBack: () => void
   onOpenModels: () => void
   onApplied: () => Promise<void>
 }
 
-export function SettingsModal({ app, open, busy, onClose, onOpenModels, onApplied }: SettingsModalProps) {
+export function SettingsView({ app, busy, onBack, onOpenModels, onApplied }: SettingsViewProps) {
   const [cliDefaults, setCliDefaults] = useState<PlayerSettings & { speedScale: number }>({ speedScale: 1 })
   const [values, setValues] = useState<PlayerSettings>({ speedScale: 1 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open || !app) return
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -45,12 +43,9 @@ export function SettingsModal({ app, open, busy, onClose, onOpenModels, onApplie
     return () => {
       cancelled = true
     }
-  }, [open, app])
-
-  if (!open) return null
+  }, [app])
 
   const apply = async (reset = false) => {
-    if (!app) return
     setLoading(true)
     setError(null)
     try {
@@ -71,19 +66,26 @@ export function SettingsModal({ app, open, busy, onClose, onOpenModels, onApplie
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
-      <div className="w-full max-w-md rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-semibold text-[var(--ui-text)]">設定</div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm text-[var(--ui-text-secondary)] hover:text-[var(--ui-text)]"
-          >
-            閉じる
-          </button>
-        </div>
+    <div className="space-y-3 p-3">
+      <div className="flex items-center justify-between rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
+        >
+          ← プレイヤーに戻る
+        </button>
+        <div className="text-sm font-semibold text-[var(--ui-text)]">設定</div>
+        <button
+          type="button"
+          onClick={onOpenModels}
+          className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
+        >
+          モデル管理
+        </button>
+      </div>
 
+      <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
         <div className="space-y-3">
           <SettingNumber
             label="再生速度"
@@ -134,13 +136,6 @@ export function SettingsModal({ app, open, busy, onClose, onOpenModels, onApplie
             className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)] disabled:opacity-50"
           >
             リセット
-          </button>
-          <button
-            type="button"
-            onClick={onOpenModels}
-            className="ml-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
-          >
-            モデル管理
           </button>
         </div>
       </div>
