@@ -32,6 +32,7 @@ export type PlayerSegmentState = {
   prePhonemeLength?: number
   postPhonemeLength?: number
   pauseLengthScale?: number
+  pose?: string
 }
 
 export type PlayerSessionState = {

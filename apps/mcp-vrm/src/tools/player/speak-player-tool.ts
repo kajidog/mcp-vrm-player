@@ -1,11 +1,25 @@
 import { randomUUID } from 'node:crypto'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
+import { getVrmModelUrl } from '../../vrm-http.js'
 import { registerAppToolIfEnabled } from '../registration.js'
-import type { ToolDeps, ToolHandlerExtra } from '../types.js'
-import { createErrorResponse, getEffectiveSpeaker, parseStringInput } from '../utils.js'
+import type { ToolDeps } from '../types.js'
+import { createErrorResponse } from '../utils.js'
 import { playerResourceUri } from './runtime.js'
 import type { PlayerRuntime } from './runtime.js'
+
+interface SegmentInput {
+  pose?: string
+  text: string
+  speedScale?: number
+}
+
+interface ResolvedSegment {
+  text: string
+  speaker: number
+  speedScale: number
+  pose?: string
+}
 
 export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime): void {
   const { server, config, disabledTools, engine, capabilities } = deps
@@ -17,13 +31,26 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     {
       title: 'Speak Player',
       description:
-        'Use when you need a player UI (display, edit, or replay audio). Creates a TTS player session, returns viewUUID. Multi-speaker format: "1:Hello\\n2:World". For simple playback without UI, use tts_speak instead.',
+        'Creates a TTS player session UI. Provide segments [{ text, pose?, speedScale? }] and an optional modelId (falls back to the registered default; call list_vrms to discover IDs). The speaker is taken from the VRM model. Returns viewUUID. For simple playback without UI, use tts_speak instead.',
       inputSchema: {
-        text: z
+        modelId: z
           .string()
-          .describe('Text to synthesize. Multi-speaker format: "1:Hello\\n2:World" (speaker ID prefix per line).'),
-        speaker: z.number().optional().describe('Default speaker ID (optional)'),
-        speedScale: z.number().optional().describe('Playback speed (optional, default from environment)'),
+          .optional()
+          .describe('VRM model ID. Falls back to the registered default; errors if no default exists.'),
+        segments: z
+          .array(
+            z.object({
+              text: z.string().describe('Text spoken in this segment.'),
+              pose: z.string().optional().describe('Pose preset ID (e.g. "idle", "wave", "bow"). Defaults to "idle".'),
+              speedScale: z.number().optional().describe('Playback speed for this segment.'),
+            })
+          )
+          .min(1)
+          .describe('One or more spoken segments. The speaker is determined by the VRM model.'),
+        speedScale: z
+          .number()
+          .optional()
+          .describe('Default playback speed applied to segments without their own speedScale.'),
       },
       annotations: {
         readOnlyHint: false,
@@ -33,37 +60,31 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
       },
       _meta: { ui: { resourceUri: playerResourceUri } },
     },
-    async (
-      {
-        text,
-        speaker,
-        speedScale,
-      }: {
-        text: string
-        speaker?: number
-        speedScale?: number
-      },
-      extra: ToolHandlerExtra
-    ): Promise<CallToolResult> => {
+    async ({
+      modelId,
+      segments,
+      speedScale,
+    }: {
+      modelId?: string
+      segments: SegmentInput[]
+      speedScale?: number
+    }): Promise<CallToolResult> => {
       try {
-        if (!text?.trim()) {
-          throw new Error('text is required')
-        }
-
-        const parsedSegments = parseStringInput(text)
-        if (parsedSegments.length === 0) {
-          throw new Error('Text is empty')
-        }
-
-        const effectiveSpeaker = getEffectiveSpeaker(speaker, extra.sessionId) ?? config.defaultSpeaker
+        const model = resolveVrmModel(runtime, modelId)
         const effectiveSpeed = speedScale ?? config.defaultSpeedScale
+        const baseSegments: ResolvedSegment[] = segments.map((s, index) => {
+          if (!s.text?.trim()) {
+            throw new Error(`segments[${index}].text is required`)
+          }
+          return {
+            text: s.text,
+            speaker: model.speakerId,
+            speedScale: s.speedScale ?? effectiveSpeed,
+            pose: s.pose,
+          }
+        })
 
-        const baseSegments = parsedSegments.map((s) => ({
-          text: s.text,
-          speaker: s.speaker ?? effectiveSpeaker,
-          speedScale: effectiveSpeed,
-        }))
-        const speakerNameMap = await runtime.resolveSpeakerNames(baseSegments.map((s) => s.speaker))
+        const speakerNameMap = await runtime.resolveSpeakerNames([model.speakerId])
         const viewUUID = randomUUID()
 
         const nextState = {
@@ -72,22 +93,34 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             speaker: s.speaker,
             speakerName: speakerNameMap.get(s.speaker),
             speedScale: s.speedScale,
+            ...(s.pose !== undefined ? { pose: s.pose } : {}),
           })),
           updatedAt: Date.now(),
         }
         runtime.setSessionState(viewUUID, nextState)
-        if (extra.sessionId && extra.sessionId !== viewUUID) {
-          runtime.setSessionState(extra.sessionId, nextState)
-        }
 
-        const fullText = parsedSegments.map((s) => s.text).join(' ')
+        const fullText = baseSegments.map((s) => s.text).join(' ')
         const textPreview = fullText.slice(0, 60) + (fullText.length > 60 ? '...' : '')
         const uiSegments = baseSegments.map((s) => ({
           text: s.text,
           speaker: s.speaker,
           speakerName: speakerNameMap.get(s.speaker),
           speedScale: s.speedScale,
+          ...(s.pose !== undefined ? { pose: s.pose } : {}),
         }))
+        const structured: Record<string, unknown> = {
+          viewUUID,
+          autoPlay: config.autoPlay,
+          segments: uiSegments,
+          engineId: engine.id,
+          engineDisplayName: engine.displayName,
+          capabilities,
+          vrmModel: {
+            id: model.id,
+            name: model.name,
+            vrmUrl: getVrmModelUrl(config, model.id),
+          },
+        }
         return {
           content: [
             {
@@ -95,26 +128,25 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
               text: `TTS Player started. viewUUID: ${viewUUID} 「${textPreview}」\nNext: tts_resynthesize_player (edit a track) | tts_get_player_state (inspect state)`,
             },
           ],
-          structuredContent: {
-            viewUUID,
-            autoPlay: config.autoPlay,
-            segments: uiSegments,
-            engineId: engine.id,
-            engineDisplayName: engine.displayName,
-            capabilities,
-          },
-          _meta: {
-            viewUUID,
-            autoPlay: config.autoPlay,
-            segments: uiSegments,
-            engineId: engine.id,
-            engineDisplayName: engine.displayName,
-            capabilities,
-          },
+          structuredContent: structured,
+          _meta: structured,
         }
       } catch (error) {
         return createErrorResponse(error)
       }
     }
   )
+}
+
+function resolveVrmModel(runtime: PlayerRuntime, modelId: string | undefined) {
+  if (modelId) {
+    const model = runtime.vrmRegistry.get(modelId)
+    if (!model) throw new Error(`VRM model not found: ${modelId}`)
+    return model
+  }
+  const defaultModel = runtime.vrmRegistry.getDefault()
+  if (!defaultModel) {
+    throw new Error('No default VRM is registered. Pass modelId or set a default via the registry.')
+  }
+  return defaultModel
 }

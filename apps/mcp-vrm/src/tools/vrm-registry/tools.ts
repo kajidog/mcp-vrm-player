@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
+import { getVrmModelUrl } from '../../vrm-http.js'
 import type { PlayerUIToolContext } from '../player-ui/context.js'
 import { registerAppToolIfEnabled } from '../registration.js'
 import { createErrorResponse } from '../utils.js'
-import { getVrmModelUrl } from '../../vrm-http.js'
 import type { VrmRegistryStore } from './store.js'
 import type { VrmModel } from './types.js'
 
@@ -16,7 +16,9 @@ function toMetadataPayload(model: VrmModel): Omit<VrmModel, 'vrmFilePath'> {
   return rest
 }
 
-async function loadConfiguredDefaultVrm(configuredPath: string): Promise<{ vrmBase64: string; sourcePath: string } | null> {
+async function loadConfiguredDefaultVrm(
+  configuredPath: string
+): Promise<{ vrmBase64: string; sourcePath: string } | null> {
   const trimmed = configuredPath.trim()
   if (!trimmed) return null
   const filePath = resolve(trimmed)

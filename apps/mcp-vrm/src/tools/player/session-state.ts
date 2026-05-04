@@ -21,6 +21,7 @@ export interface PlayerSegmentState {
   prePhonemeLength?: number
   postPhonemeLength?: number
   pauseLengthScale?: number
+  pose?: string
 }
 
 export interface PlayerSessionState {

@@ -1,5 +1,6 @@
 import { registerPlayerUITools } from '../player-ui-tools.js'
 import type { ToolDeps } from '../types.js'
+import { registerVrmPublicTools } from '../vrm-registry/public-tools.js'
 import { registerPlayerResource } from './resource.js'
 import { createPlayerRuntime, playerResourceUri } from './runtime.js'
 import { registerSpeakPlayerTool } from './speak-player-tool.js'
@@ -11,6 +12,7 @@ export function registerPlayerTools(deps: ToolDeps): void {
   // UIリソースと公開ツールを登録。
   registerPlayerResource(deps)
   registerSpeakPlayerTool(deps, runtime)
+  registerVrmPublicTools(deps, runtime.vrmRegistry)
 
   // App UI専用の内部ツール群に shared 依存を注入する。
   registerPlayerUITools(deps, {

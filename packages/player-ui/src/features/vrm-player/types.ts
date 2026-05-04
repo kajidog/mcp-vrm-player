@@ -38,6 +38,9 @@ export interface VrmPlayerState {
   loadingModel: boolean
   isReadyForDisplay: boolean
   app: import('@modelcontextprotocol/ext-apps').App | null
+  // 直近の speak_player 呼び出しで指示された現在のポーズID（idle 等）。未指定時は undefined。
+  // 複数セグメントの場合は推定時間で順番に切替わる。
+  pose: string | undefined
   loadLocalVrmFile: (file: File) => Promise<void>
   setModelError: (message: string) => void
 }

@@ -1,0 +1,218 @@
+import { mkdirSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { ServerConfig } from '../config.js'
+import type { PlayerRuntime } from '../tools/player/runtime.js'
+import type { PlayerSessionState } from '../tools/player/session-state.js'
+import { registerSpeakPlayerTool } from '../tools/player/speak-player-tool.js'
+import { VrmRegistryStore } from '../tools/vrm-registry/store.js'
+
+const TMP = join(process.cwd(), '__test_speak_player_tmp__')
+
+const SAMPLE_VRM_BYTES = Buffer.from([
+  0x67,
+  0x6c,
+  0x54,
+  0x46, // glTF
+  0x02,
+  0x00,
+  0x00,
+  0x00, // version 2
+  0x0c,
+  0x00,
+  0x00,
+  0x00, // length
+])
+const SAMPLE_VRM_BASE64 = SAMPLE_VRM_BYTES.toString('base64')
+
+interface CapturedRegistration {
+  name: string
+  config: Record<string, unknown>
+  handler: (args: Record<string, unknown>, extra: { sessionId?: string }) => Promise<CallToolResult>
+}
+
+function buildHarness(registry: VrmRegistryStore) {
+  const registrations: CapturedRegistration[] = []
+  const server = {
+    registerTool: (name: string, config: Record<string, unknown>, handler: CapturedRegistration['handler']) => {
+      registrations.push({ name, config, handler })
+    },
+  } as unknown as Parameters<typeof registerSpeakPlayerTool>[0]['server']
+
+  const config = {
+    httpHost: 'localhost',
+    httpPort: 8765,
+    autoPlay: true,
+    defaultSpeaker: 1,
+    defaultSpeedScale: 1.0,
+    playerDefaultVrmPath: '',
+  } as unknown as ServerConfig
+
+  const sessionStates = new Map<string, PlayerSessionState>()
+  const runtime: PlayerRuntime = {
+    playerEngine: {} as PlayerRuntime['playerEngine'],
+    getSpeakerList: async () => [],
+    getSpeakerName: async (id) => `Speaker ${id}`,
+    resolveSpeakerNames: async (speakerIds) => {
+      const map = new Map<number, string>()
+      for (const id of new Set(speakerIds)) map.set(id, `Speaker ${id}`)
+      return map
+    },
+    getUserDictionaryWords: async () => [],
+    synthesizeWithCache: async () => {
+      throw new Error('synthesizeWithCache should not be called in speak_player tests')
+    },
+    setSessionState: (key, state) => sessionStates.set(key, state),
+    getSessionState: (viewUUID, sessionId) => sessionStates.get(viewUUID ?? sessionId ?? 'global'),
+    getSessionStateByKey: (key) => sessionStates.get(key),
+    vrmRegistry: registry,
+  }
+
+  registerSpeakPlayerTool(
+    {
+      server,
+      ttsClient: {} as never,
+      engine: { id: 'voicevox', displayName: 'VOICEVOX' } as PlayerRuntime['playerEngine'],
+      capabilities: {} as never,
+      config,
+      disabledTools: new Set(),
+    },
+    runtime
+  )
+
+  const registration = registrations.find((r) => r.name.endsWith('speak_player'))
+  if (!registration) throw new Error('speak_player was not registered')
+
+  return {
+    sessionStates,
+    invoke: (args: Record<string, unknown>, extra: { sessionId?: string } = {}) => registration.handler(args, extra),
+  }
+}
+
+describe('speak_player Phase 5', () => {
+  let registry: VrmRegistryStore
+
+  beforeEach(() => {
+    rmSync(TMP, { recursive: true, force: true })
+    mkdirSync(TMP, { recursive: true })
+    registry = new VrmRegistryStore({ cacheDir: TMP })
+  })
+
+  afterEach(() => {
+    rmSync(TMP, { recursive: true, force: true })
+  })
+
+  it('modelId + segments を受け取ると vrmModel と pose 付き segments が返る', async () => {
+    const model = await registry.register({ name: 'Alice', speakerId: 7, vrmBase64: SAMPLE_VRM_BASE64 })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [
+        { pose: 'wave', text: 'Hi' },
+        { pose: 'bow', text: 'Bye' },
+      ],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      vrmModel?: { id: string; name: string; vrmUrl: string }
+      segments: Array<{ text: string; speaker: number; pose?: string; speedScale: number }>
+    }
+    expect(structured.vrmModel).toEqual({
+      id: model.id,
+      name: 'Alice',
+      vrmUrl: `http://localhost:8765/vrms/${model.id}.vrm`,
+    })
+    expect(structured.segments).toHaveLength(2)
+    expect(structured.segments[0]).toMatchObject({ text: 'Hi', pose: 'wave', speaker: 7 })
+    expect(structured.segments[1]).toMatchObject({ text: 'Bye', pose: 'bow', speaker: 7 })
+  })
+
+  it('modelId 未指定なら登録済みデフォルト VRM を使う', async () => {
+    const model = await registry.register({
+      name: 'Default',
+      speakerId: 3,
+      isDefault: true,
+      vrmBase64: SAMPLE_VRM_BASE64,
+    })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      segments: [{ text: 'hello' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as { vrmModel?: { id: string }; segments: Array<{ speaker: number }> }
+    expect(structured.vrmModel?.id).toBe(model.id)
+    expect(structured.segments[0].speaker).toBe(3)
+  })
+
+  it('segments 指定でデフォルトも未登録ならエラー', async () => {
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      segments: [{ text: 'hello' }],
+    })
+
+    expect(result.isError).toBe(true)
+    const text = (result.content?.[0] as { type: 'text'; text: string }).text
+    expect(text).toMatch(/No default VRM/)
+  })
+
+  it('未登録の modelId はエラー', async () => {
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: 'does-not-exist',
+      segments: [{ text: 'x' }],
+    })
+
+    expect(result.isError).toBe(true)
+    const text = (result.content?.[0] as { type: 'text'; text: string }).text
+    expect(text).toMatch(/VRM model not found/)
+  })
+
+  it('結果に vrmBase64 は含めない（HTTP 配信前提）', async () => {
+    const model = await registry.register({ name: 'Alice', speakerId: 1, vrmBase64: SAMPLE_VRM_BASE64 })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ text: 'Hi' }],
+    })
+
+    const json = JSON.stringify(result)
+    expect(json).not.toContain('vrmBase64')
+  })
+
+  it('全セグメントの speaker はモデル登録時の speakerId に統一される', async () => {
+    const model = await registry.register({ name: 'A', speakerId: 42, vrmBase64: SAMPLE_VRM_BASE64 })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ text: 'a' }, { text: 'b' }, { text: 'c' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as { segments: Array<{ speaker: number }> }
+    expect(structured.segments.map((s) => s.speaker)).toEqual([42, 42, 42])
+  })
+
+  it('pose 未指定セグメントは pose プロパティを保存しない（UI 側で idle 扱い）', async () => {
+    const model = await registry.register({ name: 'A', speakerId: 1, vrmBase64: SAMPLE_VRM_BASE64 })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ text: 'no pose' }, { pose: 'wave', text: 'with pose' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as { segments: Array<{ pose?: string }> }
+    expect(structured.segments[0].pose).toBeUndefined()
+    expect(structured.segments[1].pose).toBe('wave')
+  })
+})

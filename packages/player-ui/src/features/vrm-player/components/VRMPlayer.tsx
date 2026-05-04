@@ -1,3 +1,5 @@
+import type { PosePresetId } from '../../poses/presets'
+import { POSE_PRESETS } from '../../poses/presets'
 import { useVrmFileDrop } from '../hooks/useVrmFileDrop'
 import type { VrmSource } from '../types'
 import { VRMCanvas } from './VRMCanvas'
@@ -5,6 +7,8 @@ import { VRMCanvas } from './VRMCanvas'
 interface VRMPlayerProps {
   source: VrmSource | null
   loadingModel: boolean
+  // 現在適用したいポーズID。プリセット名と一致しなければ無視（idle 扱い）。
+  pose?: string
   onLocalFile: (file: File) => Promise<void>
   onModelError: (message: string) => void
   // ヘッダ右の「メニュー」ボタン押下時に呼ばれる。VRM 一覧画面への遷移用。
@@ -12,13 +16,20 @@ interface VRMPlayerProps {
   onOpenMenu?: () => void
 }
 
+// 文字列を PosePresetId に絞り込む。未知のプリセットは undefined を返し、VRMScene 側で idle として扱う。
+function asPresetId(value: string | undefined): PosePresetId | undefined {
+  if (!value) return undefined
+  return value in POSE_PRESETS ? (value as PosePresetId) : undefined
+}
+
 /**
  * Player UI のレイアウト。ヘッダ（ラベル/状態/ファイルボタン）と
  * 3D プレビュー（VRMCanvas）を並べ、外側 div で D&D を受ける。
  * source が null のときも Canvas は常に出すので「空の空間」が表示される。
  */
-export function VRMPlayer({ source, loadingModel, onLocalFile, onModelError, onOpenMenu }: VRMPlayerProps) {
+export function VRMPlayer({ source, loadingModel, pose, onLocalFile, onModelError, onOpenMenu }: VRMPlayerProps) {
   const { isDragging, openFilePicker, dropHandlers, inputProps } = useVrmFileDrop({ onFile: onLocalFile })
+  const presetPose = asPresetId(pose)
 
   return (
     <div
@@ -56,7 +67,7 @@ export function VRMPlayer({ source, loadingModel, onLocalFile, onModelError, onO
         </div>
       </div>
 
-      <VRMCanvas source={source} onError={onModelError} />
+      <VRMCanvas source={source} onError={onModelError} pose={presetPose} />
     </div>
   )
 }

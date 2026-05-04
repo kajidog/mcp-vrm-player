@@ -20,10 +20,19 @@ export function readString(record: Record<string, unknown>, key: string): string
 export function pickVrmPayload(source: unknown): VrmPayload | null {
   if (!isRecord(source)) return null
 
+  // speak_player の新形式は `vrmModel: { vrmUrl }` を入れ子で返す。最優先で拾う。
+  const nested = isRecord(source.vrmModel) ? (source.vrmModel as Record<string, unknown>) : null
+
   const payload: VrmPayload = {
-    vrmUrl: readString(source, 'vrmUrl') ?? readString(source, 'modelUrl'),
+    vrmUrl:
+      (nested ? readString(nested, 'vrmUrl') : undefined) ??
+      readString(source, 'vrmUrl') ??
+      readString(source, 'modelUrl'),
     vrmBase64: readString(source, 'vrmBase64') ?? readString(source, 'modelBase64'),
-    vrmMimeType: readString(source, 'vrmMimeType') ?? readString(source, 'modelMimeType'),
+    vrmMimeType:
+      (nested ? readString(nested, 'vrmMimeType') : undefined) ??
+      readString(source, 'vrmMimeType') ??
+      readString(source, 'modelMimeType'),
     vrmPath: readString(source, 'vrmPath') ?? readString(source, 'modelPath'),
     vrmResourceUri: readString(source, 'vrmResourceUri') ?? readString(source, 'modelResourceUri'),
   }
@@ -83,4 +92,52 @@ export function extractPayloadFromResult(result: CallToolResult): VrmPayload | n
 // 結果待ちの段階でプレビューを先行表示するために使う。
 export function extractPayloadFromInput(params: McpUiToolInputNotification['params']): VrmPayload | null {
   return pickVrmPayload(params.arguments)
+}
+
+export interface PoseSegment {
+  pose?: string
+  text: string
+  speedScale?: number
+}
+
+function pickPoseSegments(source: unknown): PoseSegment[] | null {
+  if (!isRecord(source)) return null
+  const segments = source.segments
+  if (!Array.isArray(segments)) return null
+  const result: PoseSegment[] = []
+  for (const segment of segments) {
+    if (!isRecord(segment)) continue
+    const text = readString(segment, 'text')
+    if (!text) continue
+    result.push({
+      text,
+      pose: readString(segment, 'pose'),
+      speedScale: typeof segment.speedScale === 'number' ? segment.speedScale : undefined,
+    })
+  }
+  return result.length > 0 ? result : null
+}
+
+/**
+ * `speak_player` 結果からポーズ付きセグメント列を取り出す。
+ * structuredContent → _meta → text(JSON) の順で探し、いずれにも無ければ null。
+ */
+export function extractPoseSegmentsFromResult(result: CallToolResult): PoseSegment[] | null {
+  const fromStructured = pickPoseSegments(result.structuredContent)
+  if (fromStructured) return fromStructured
+
+  const meta = (result as { _meta?: Record<string, unknown> })._meta
+  const fromMeta = pickPoseSegments(meta)
+  if (fromMeta) return fromMeta
+
+  const textContent = result.content?.find((content) => content.type === 'text')
+  if (textContent?.type === 'text') {
+    try {
+      return pickPoseSegments(JSON.parse(textContent.text))
+    } catch {
+      return null
+    }
+  }
+
+  return null
 }

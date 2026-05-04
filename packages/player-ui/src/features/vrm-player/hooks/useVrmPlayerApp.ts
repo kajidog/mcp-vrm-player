@@ -3,7 +3,12 @@ import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useEffect, useRef, useState } from 'react'
 import type { VrmPayload, VrmPlayerState, VrmPlayerStatus } from '../types'
-import { extractPayloadFromInput, extractPayloadFromResult } from '../utils/vrmPayload'
+import {
+  extractPayloadFromInput,
+  extractPayloadFromResult,
+  extractPoseSegmentsFromResult,
+  type PoseSegment,
+} from '../utils/vrmPayload'
 import { resolveVrmSource } from '../utils/vrmSource'
 import { useRevokableObjectUrl } from './useRevokableObjectUrl'
 import { fetchDefaultVrmOnServer } from './vrmPlayerToolClient'
@@ -25,11 +30,22 @@ function isPlayerToolResult(result: CallToolResult): boolean {
       structured?.segments ||
       structured?.vrmBase64 ||
       structured?.vrmResourceUri ||
+      structured?.vrmModel ||
       meta?.viewUUID ||
       meta?.segments ||
       meta?.vrmBase64 ||
-      meta?.vrmResourceUri
+      meta?.vrmResourceUri ||
+      meta?.vrmModel
   )
+}
+
+// 1 セグメントの粗い再生時間推定（host 側で実際の音声再生をしているため、ここでは
+// 文字数ベースのヒューリスティック。speedScale で割って早口/ゆっくりを近似する）。
+function estimateSegmentDurationMs(segment: PoseSegment): number {
+  const charDurationMs = 130
+  const speed = segment.speedScale && segment.speedScale > 0 ? segment.speedScale : 1
+  const base = Math.max(segment.text.length, 1) * charDurationMs
+  return Math.max(600, Math.round(base / speed))
 }
 
 /**
@@ -47,10 +63,47 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [errorMsg, setErrorMsg] = useState('')
   const [source, setSource] = useState<VrmPlayerState['source']>(null)
   const [loadingModel, setLoadingModel] = useState(false)
+  const [pose, setPose] = useState<string | undefined>(undefined)
   const appRef = useRef<App | null>(null)
   // `setModelError` から「現在表示中のソース種別」を同期参照するための ref。
   const sourceRef = useRef<VrmPlayerState['source']>(null)
+  const poseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { replaceObjectUrl } = useRevokableObjectUrl()
+
+  // 進行中のポーズタイマーを停止する。次のツール結果が来たり、unmount するときに呼ぶ。
+  const clearPoseTimer = () => {
+    if (poseTimerRef.current !== null) {
+      clearTimeout(poseTimerRef.current)
+      poseTimerRef.current = null
+    }
+  }
+
+  // segments[].pose を順番に切り替える。host 側の音声再生と厳密同期は出来ないため、
+  // 文字数ベースの推定時間で進める。最終セグメント終了後は idle へ戻す。
+  const startPoseSequence = (segments: PoseSegment[]): void => {
+    clearPoseTimer()
+    if (segments.length === 0) {
+      setPose(undefined)
+      return
+    }
+
+    let index = 0
+    const advance = () => {
+      const current = segments[index]
+      if (!current) {
+        setPose('idle')
+        poseTimerRef.current = null
+        return
+      }
+      setPose(current.pose ?? 'idle')
+      const duration = estimateSegmentDurationMs(current)
+      index += 1
+      poseTimerRef.current = setTimeout(advance, duration)
+    }
+    advance()
+  }
+
+  useEffect(() => clearPoseTimer, [])
 
   const setResolvedSource = (nextSource: VrmPlayerState['source']) => {
     sourceRef.current = nextSource
@@ -150,6 +203,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
       // ツール結果到着。エラーなら即エラー表示、それ以外はペイロードを解決する。
       createdApp.ontoolresult = async (result: CallToolResult) => {
         if (result.isError) {
+          clearPoseTimer()
+          setPose(undefined)
           setStatus('error')
           setErrorMsg(extractErrorMessage(result))
           return
@@ -158,6 +213,17 @@ export function useVrmPlayerApp(): VrmPlayerState {
         const payload = extractPayloadFromResult(result)
         if (!payload && !isPlayerToolResult(result)) {
           return
+        }
+
+        // speak_player の新形式は segments[].pose を含む。VRM 表示完了を待たず、
+        // 結果到着と同時にポーズ列を回し始める（VRMScene 側はマウント後即適用される）。
+        const segments = extractPoseSegmentsFromResult(result)
+        if (segments) {
+          startPoseSequence(segments)
+        } else if (isPlayerToolResult(result)) {
+          // 古い text 形式や segments 無しケースでは idle に戻す。
+          clearPoseTimer()
+          setPose(undefined)
         }
 
         await applyPayload(payload, 'ready')
@@ -196,6 +262,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     errorMsg,
     source,
     loadingModel,
+    pose,
     isReadyForDisplay: Boolean(app),
     app: app ?? null,
     // ユーザーがローカル VRM をドロップ/選択したときの取り込み処理。

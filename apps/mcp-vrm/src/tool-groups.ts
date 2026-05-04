@@ -6,7 +6,7 @@
  */
 export const TOOL_GROUPS: Record<string, string[]> = {
   /** All player UI tools */
-  player: ['speak_player', 'resynthesize_player', 'get_player_state', 'open_dictionary_ui'],
+  player: ['speak_player', 'resynthesize_player', 'get_player_state', 'open_dictionary_ui', 'list_vrms'],
   /** Dictionary read/write tools kept for backward-compatible --disable-groups handling */
   dictionary: [
     'get_accent_phrases',
