@@ -1,7 +1,6 @@
 import { Html, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import { type ComponentRef, useEffect, useRef, useState } from 'react'
-import { Vector3 } from 'three'
 import type { PosePresetId } from '../../poses/presets'
 import { useColorScheme } from '../hooks/useColorScheme'
 import type { VrmSource } from '../types'
@@ -27,106 +26,17 @@ const SCENE_COLORS = {
 } as const
 
 /**
- * 左右ボタン同時押し中だけパン（target 平行移動）するハンドラを仕込む。
- * OrbitControls の標準では左=回転 / 右=パンになっているので、
- * 同時押し検出中のみ enableRotate=false にして「左+右で動くドラッグ」を成立させる。
+ * 右ドラッグでパンする際に出てしまうブラウザの contextmenu を抑止する。
+ * OrbitControls 自身は preventDefault しないので、最低限ここで止める。
  */
-function DualButtonPanController({ controlsRef }: { controlsRef: React.RefObject<OrbitControlsImpl | null> }) {
-  const { gl, camera } = useThree()
-
+function CanvasContextMenuSuppressor() {
+  const { gl } = useThree()
   useEffect(() => {
     const dom = gl.domElement
-    const buttons = new Set<number>()
-    let lastX = 0
-    let lastY = 0
-    let panActive = false
-    // パン中だけ rotate を切る。終わったら必ず元に戻すため、有効化前の値を覚えておく。
-    let originalEnableRotate = true
-
-    const startPanIfNeeded = (event: PointerEvent) => {
-      if (panActive) return
-      if (!buttons.has(0) || !buttons.has(2)) return
-      const controls = controlsRef.current
-      if (!controls) return
-      panActive = true
-      originalEnableRotate = controls.enableRotate
-      controls.enableRotate = false
-      lastX = event.clientX
-      lastY = event.clientY
-    }
-
-    const stopPan = () => {
-      if (!panActive) return
-      panActive = false
-      const controls = controlsRef.current
-      if (controls) controls.enableRotate = originalEnableRotate
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      buttons.add(event.button)
-      // contextmenu を抑止しないと右クリックでメニューが出てパンが切れる。
-      if (event.button === 2) event.preventDefault()
-      startPanIfNeeded(event)
-    }
-
-    const onPointerMove = (event: PointerEvent) => {
-      if (!panActive) return
-      const controls = controlsRef.current
-      if (!controls) return
-      const dx = event.clientX - lastX
-      const dy = event.clientY - lastY
-      lastX = event.clientX
-      lastY = event.clientY
-
-      // カメラ平面に沿って target を動かす。fov と target 距離からピクセル→世界座標換算する。
-      const offset = new Vector3().subVectors(camera.position, controls.target)
-      const distance = offset.length()
-      const halfHeight = Math.tan(((camera as { fov?: number }).fov ?? 50) * 0.5 * (Math.PI / 180)) * distance
-      const rect = dom.getBoundingClientRect()
-      const worldPerPixel = (halfHeight * 2) / rect.height
-
-      const right = new Vector3().setFromMatrixColumn(camera.matrix, 0)
-      const up = new Vector3().setFromMatrixColumn(camera.matrix, 1)
-      const move = new Vector3()
-      move.addScaledVector(right, -dx * worldPerPixel)
-      move.addScaledVector(up, dy * worldPerPixel)
-      controls.target.add(move)
-      camera.position.add(move)
-      controls.update()
-    }
-
-    const onPointerUp = (event: PointerEvent) => {
-      buttons.delete(event.button)
-      if (panActive && (!buttons.has(0) || !buttons.has(2))) {
-        stopPan()
-      }
-    }
-
-    const onPointerLeave = () => {
-      buttons.clear()
-      stopPan()
-    }
-
-    const onContextMenu = (event: MouseEvent) => {
-      event.preventDefault()
-    }
-
-    dom.addEventListener('pointerdown', onPointerDown)
-    dom.addEventListener('pointermove', onPointerMove)
-    dom.addEventListener('pointerup', onPointerUp)
-    dom.addEventListener('pointerleave', onPointerLeave)
+    const onContextMenu = (event: MouseEvent) => event.preventDefault()
     dom.addEventListener('contextmenu', onContextMenu)
-
-    return () => {
-      dom.removeEventListener('pointerdown', onPointerDown)
-      dom.removeEventListener('pointermove', onPointerMove)
-      dom.removeEventListener('pointerup', onPointerUp)
-      dom.removeEventListener('pointerleave', onPointerLeave)
-      dom.removeEventListener('contextmenu', onContextMenu)
-      stopPan()
-    }
-  }, [gl, camera, controlsRef])
-
+    return () => dom.removeEventListener('contextmenu', onContextMenu)
+  }, [gl])
   return null
 }
 
@@ -193,8 +103,9 @@ export function VRMCanvas({ source, onError, pose, speechText, fullscreen = fals
           <gridHelper args={[6, 12, colors.gridA, colors.gridB]} position={[0, -1, 0]} />
           {source ? <VRMScene source={source} onError={onError} pose={pose} onCenterReady={setCenterY} /> : null}
           {/* 仮置き target。ロード完了後に CenterController が VRM の上半身高さに更新する。 */}
-          <OrbitControls ref={controlsRef} enablePan={false} target={[0, 1.1, 0]} />
-          <DualButtonPanController controlsRef={controlsRef} />
+          {/* 左ドラッグ=回転 / 右ドラッグ=パン / ホイール=ズーム（OrbitControls 標準）。 */}
+          <OrbitControls ref={controlsRef} enablePan target={[0, 1.1, 0]} />
+          <CanvasContextMenuSuppressor />
           <CenterController controlsRef={controlsRef} centerY={centerY} />
           {speechText ? <SpeechBubble3D centerY={centerY} text={speechText} /> : null}
         </Canvas>

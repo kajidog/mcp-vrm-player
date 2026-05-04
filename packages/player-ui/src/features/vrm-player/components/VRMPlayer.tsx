@@ -16,6 +16,7 @@ interface VRMPlayerProps {
   listRefreshKey: number
   isPlaying: boolean
   canReplay: boolean
+  hasSegments: boolean
   settingsOpen: boolean
   fullscreen: boolean
   canFullscreen: boolean
@@ -49,6 +50,7 @@ export function VRMPlayer({
   listRefreshKey,
   isPlaying,
   canReplay,
+  hasSegments,
   settingsOpen,
   fullscreen,
   canFullscreen,
@@ -75,7 +77,7 @@ export function VRMPlayer({
         activeModelId={activeModelId}
         loadingModel={loadingModel}
         listRefreshKey={listRefreshKey}
-        hasSegments={canReplay || isPlaying}
+        hasSegments={hasSegments}
         isPlaying={isPlaying}
         canReplay={canReplay}
         fullscreen={fullscreen}

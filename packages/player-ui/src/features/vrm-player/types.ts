@@ -57,6 +57,8 @@ export interface VrmPlayerState {
   next: () => void
   isPlaying: boolean
   canReplay: boolean
+  // セグメントが 1 件以上あるか。Pause 中も true（操作ボタン活性化判定に使う）。
+  hasSegments: boolean
   resynthesizeAll: (settings?: {
     speedScale?: number
     prePhonemeLength?: number

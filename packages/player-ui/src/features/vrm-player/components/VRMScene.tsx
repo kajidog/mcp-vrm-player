@@ -1,5 +1,5 @@
 import { type VRM, VRMHumanBoneName, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import { Vector3 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -21,6 +21,8 @@ interface VRMSceneProps {
  */
 export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps) {
   const [vrm, setVrm] = useState<VRM | null>(null)
+  // lookAt の追従先として現在のカメラを使う（vrm.update() が毎フレーム参照する）。
+  const { camera } = useThree()
   // 経過時間（idle の呼吸など、時刻ベースの揺らぎに使う）。useFrame の delta を加算する。
   const elapsedRef = useRef(0)
   // pose は ref に写してから useFrame で参照する（レンダ越しに最新値を拾うため）。
@@ -148,6 +150,16 @@ export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps
       }
     }
   }, [source.data, source.src])
+
+  // 目線追従: vrm.lookAt.target にカメラを刺すと vrm.update() が眼/頭骨を毎フレーム回す。
+  // モデル差し替え時は新しい vrm に対して再度設定する必要がある。
+  useEffect(() => {
+    if (!vrm?.lookAt) return
+    vrm.lookAt.target = camera
+    return () => {
+      if (vrm.lookAt) vrm.lookAt.target = null
+    }
+  }, [vrm, camera])
 
   // 毎フレーム delta を渡して spring bone / 表情 / lookAt をシミュレーションする。
   // ポーズはヒューマノイドの正規化ボーン回転を上書きするので、vrm.update() の前に

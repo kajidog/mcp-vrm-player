@@ -92,6 +92,7 @@ export function McpApp() {
         listRefreshKey={listRefreshKey}
         isPlaying={player.isPlaying}
         canReplay={player.canReplay}
+        hasSegments={player.hasSegments}
         settingsOpen={settingsOpen}
         fullscreen={fullscreen}
         canFullscreen={displayMode.canFullscreen}

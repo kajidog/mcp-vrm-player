@@ -554,6 +554,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     activeModel,
     isPlaying: currentSegmentIndex !== null && !paused,
     canReplay: currentSegmentIndex === null && segments.length > 0,
+    hasSegments: segments.length > 0,
     isReadyForDisplay: Boolean(app),
     app: app ?? null,
     switchVrm,
