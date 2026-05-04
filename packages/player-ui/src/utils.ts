@@ -24,6 +24,21 @@ export function extractPlayerData(result: CallToolResult): PlayerData | null {
 }
 
 export function extractMultiPlayerData(result: CallToolResult): MultiPlayerData | null {
+  const structured = result.structuredContent as Record<string, unknown> | undefined
+  if (structured?.segments && Array.isArray(structured.segments)) {
+    return {
+      segments: structured.segments as MultiPlayerData['segments'],
+      autoPlay: structured.autoPlay !== false,
+      viewUUID: typeof structured.viewUUID === 'string' ? structured.viewUUID : undefined,
+      engineId: typeof structured.engineId === 'string' ? structured.engineId : undefined,
+      engineDisplayName: typeof structured.engineDisplayName === 'string' ? structured.engineDisplayName : undefined,
+      capabilities:
+        typeof structured.capabilities === 'object' && structured.capabilities
+          ? (structured.capabilities as MultiPlayerData['capabilities'])
+          : undefined,
+    }
+  }
+
   // content からセグメント配列を試みる（後方互換）
   const textContent = result.content?.find((c: { type: string }) => c.type === 'text')
   if (textContent?.type === 'text') {
@@ -44,7 +59,7 @@ export function extractMultiPlayerData(result: CallToolResult): MultiPlayerData 
     }
   }
 
-  // _meta からセグメント配列を読む（speak_player / resynthesize_player の新形式）
+  // _meta からセグメント配列を読む（後方互換）
   const meta = (result as { _meta?: Record<string, unknown> })?._meta
   if (meta?.segments && Array.isArray(meta.segments)) {
     return {
@@ -53,7 +68,10 @@ export function extractMultiPlayerData(result: CallToolResult): MultiPlayerData 
       viewUUID: typeof meta.viewUUID === 'string' ? meta.viewUUID : undefined,
       engineId: typeof meta.engineId === 'string' ? meta.engineId : undefined,
       engineDisplayName: typeof meta.engineDisplayName === 'string' ? meta.engineDisplayName : undefined,
-      capabilities: typeof meta.capabilities === 'object' && meta.capabilities ? meta.capabilities as MultiPlayerData['capabilities'] : undefined,
+      capabilities:
+        typeof meta.capabilities === 'object' && meta.capabilities
+          ? (meta.capabilities as MultiPlayerData['capabilities'])
+          : undefined,
     }
   }
 

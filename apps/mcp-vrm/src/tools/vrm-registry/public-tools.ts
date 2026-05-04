@@ -55,7 +55,6 @@ export function registerVrmPublicTools(deps: ToolDeps, registry: VrmRegistryStor
             },
           ],
           structuredContent: { vrms: entries },
-          _meta: { vrms: entries },
         }
       } catch (error) {
         return createErrorResponse(error)

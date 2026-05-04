@@ -8,14 +8,15 @@
   "exports": {
     ".": "./dist/mcp-app.html"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "vite build",
     "build:dev": "NODE_ENV=development vite build",
     "watch": "vite build --watch",
-    "dev": "vite"
+    "dev": "vite",
+    "typecheck": "tsgo --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.1",
@@ -28,11 +29,14 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@kajidog/tts-client": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@tailwindcss/vite": "^4.2.4",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.0",
+    "@typescript/native-preview": "7.0.0-dev.20250712.1",
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.9.3",

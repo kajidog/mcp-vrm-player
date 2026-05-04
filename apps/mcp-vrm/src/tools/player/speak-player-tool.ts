@@ -129,7 +129,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             },
           ],
           structuredContent: structured,
-          _meta: structured,
+          _meta: { viewUUID },
         }
       } catch (error) {
         return createErrorResponse(error)

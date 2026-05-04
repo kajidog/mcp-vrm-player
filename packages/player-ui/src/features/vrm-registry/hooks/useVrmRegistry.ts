@@ -126,10 +126,7 @@ export function useVrmRegistry(app: App | null): UseVrmRegistry {
     [refresh]
   )
 
-  const setDefault = useCallback(
-    (modelId: string) => update(modelId, { isDefault: true }),
-    [update]
-  )
+  const setDefault = useCallback((modelId: string) => update(modelId, { isDefault: true }), [update])
 
   useEffect(() => {
     if (app) {

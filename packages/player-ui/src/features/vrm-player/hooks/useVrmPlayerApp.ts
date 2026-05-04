@@ -4,10 +4,10 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useEffect, useRef, useState } from 'react'
 import type { VrmPayload, VrmPlayerState, VrmPlayerStatus } from '../types'
 import {
+  type PoseSegment,
   extractPayloadFromInput,
   extractPayloadFromResult,
   extractPoseSegmentsFromResult,
-  type PoseSegment,
 } from '../utils/vrmPayload'
 import { resolveVrmSource } from '../utils/vrmSource'
 import { useRevokableObjectUrl } from './useRevokableObjectUrl'
@@ -103,7 +103,15 @@ export function useVrmPlayerApp(): VrmPlayerState {
     advance()
   }
 
-  useEffect(() => clearPoseTimer, [])
+  useEffect(
+    () => () => {
+      if (poseTimerRef.current !== null) {
+        clearTimeout(poseTimerRef.current)
+        poseTimerRef.current = null
+      }
+    },
+    []
+  )
 
   const setResolvedSource = (nextSource: VrmPlayerState['source']) => {
     sourceRef.current = nextSource

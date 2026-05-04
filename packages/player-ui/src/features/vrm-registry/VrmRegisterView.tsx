@@ -107,7 +107,7 @@ function useSpeakerPortrait(app: App | null, uuid: string | null) {
     }
   }, [app, uuid, portraits])
 
-  return uuid ? portraits[uuid] ?? null : null
+  return uuid ? (portraits[uuid] ?? null) : null
 }
 
 function useSpeakers(app: App | null) {
@@ -287,11 +287,11 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
       }
     : vrmBuffer
       ? {
-        data: vrmBuffer,
-        label: vrmFileName ?? 'VRM',
-        note: 'プレビュー中',
-        isLocal: true,
-      }
+          data: vrmBuffer,
+          label: vrmFileName ?? 'VRM',
+          note: 'プレビュー中',
+          isLocal: true,
+        }
       : null
 
   const handleSave = useCallback(async () => {
@@ -514,7 +514,9 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
               ))}
             </select>
           </div>
-          {speakersError ? <div className="mt-1 text-[11px] text-red-600">話者一覧の取得に失敗: {speakersError}</div> : null}
+          {speakersError ? (
+            <div className="mt-1 text-[11px] text-red-600">話者一覧の取得に失敗: {speakersError}</div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--ui-text)]">
@@ -541,7 +543,9 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
       <div className="space-y-2 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3">
         <div className="flex items-center justify-between">
           <div className="text-xs font-semibold text-[var(--ui-text)]">音声テスト</div>
-          {testingLabel ? <div className="text-[11px] text-[var(--ui-text-secondary)]">「{testingLabel}」合成中...</div> : null}
+          {testingLabel ? (
+            <div className="text-[11px] text-[var(--ui-text-secondary)]">「{testingLabel}」合成中...</div>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {TEST_PRESETS.map((preset) => (

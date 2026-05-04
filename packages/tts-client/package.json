@@ -31,6 +31,7 @@
     "build": "tsgo",
     "build:tsc": "tsc",
     "build:clean": "rm -rf dist && pnpm build",
+    "typecheck": "tsgo --noEmit",
     "lint": "biome check . && tsc --noEmit",
     "lint:fix": "biome check --write .",
     "prepare": "pnpm build",

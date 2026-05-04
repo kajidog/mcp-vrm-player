@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsgo",
     "build:tsc": "tsc",
+    "typecheck": "tsgo --noEmit",
     "prepare": "pnpm build"
   },
   "dependencies": {
