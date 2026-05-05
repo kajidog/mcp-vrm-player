@@ -17,6 +17,8 @@ interface VRMCanvasProps {
   pose?: PosePresetId
   // 吹き出しに出すテキスト。null のときは吹き出しを描画しない。
   speechText: string | null
+  currentIndex?: number | null
+  totalSegments?: number
   hasSegments?: boolean
   fullscreen?: boolean
   onPrev?: () => void
@@ -75,11 +77,15 @@ function CenterController({
 function WheelTrackController({
   controlsRef,
   hasSegments,
+  currentIndex,
+  totalSegments,
   onPrev,
   onNext,
 }: {
   controlsRef: React.RefObject<OrbitControlsImpl | null>
   hasSegments: boolean
+  currentIndex: number | null
+  totalSegments: number
   onPrev: () => void
   onNext: () => void
 }) {
@@ -111,9 +117,18 @@ function WheelTrackController({
       if (!hasSegments || middleDragRef.current.active) return
       const now = Date.now()
       if (now - lastWheelSwitchRef.current < 200) return
-      lastWheelSwitchRef.current = now
-      if (event.deltaY > 0) onNext()
-      else if (event.deltaY < 0) onPrev()
+      const index = currentIndex ?? 0
+      if (event.deltaY > 0) {
+        // 末尾では次へ送らない（無効化）。
+        if (index >= totalSegments - 1) return
+        lastWheelSwitchRef.current = now
+        onNext()
+      } else if (event.deltaY < 0) {
+        // 先頭では前へ戻さない（無効化）。
+        if (index <= 0) return
+        lastWheelSwitchRef.current = now
+        onPrev()
+      }
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -164,6 +179,8 @@ export function VRMCanvas({
   onError,
   pose,
   speechText,
+  currentIndex = null,
+  totalSegments = 0,
   hasSegments = false,
   fullscreen = false,
   onPrev = () => {},
@@ -174,6 +191,15 @@ export function VRMCanvas({
   const colors = SCENE_COLORS[colorScheme]
   // VRMScene からセンタリング情報（上半身 y）を受け取って、カメラ追従と吹き出し位置に流す。
   const [centerY, setCenterY] = useState<number | null>(null)
+  const previousIndexRef = useRef<number | null>(null)
+  const bubbleDirection =
+    currentIndex !== null && previousIndexRef.current !== null && currentIndex < previousIndexRef.current
+      ? 'down'
+      : 'up'
+
+  useEffect(() => {
+    if (currentIndex !== null) previousIndexRef.current = currentIndex
+  }, [currentIndex])
 
   return (
     <div
@@ -201,9 +227,23 @@ export function VRMCanvas({
           {/* 左ドラッグ=回転 / 右ドラッグ=パン。ズームは WheelTrackController で割り当てる。 */}
           <OrbitControls ref={controlsRef} enablePan enableZoom={false} target={[0, 1.1, 0]} />
           <CanvasContextMenuSuppressor />
-          <WheelTrackController controlsRef={controlsRef} hasSegments={hasSegments} onPrev={onPrev} onNext={onNext} />
+          <WheelTrackController
+            controlsRef={controlsRef}
+            hasSegments={hasSegments}
+            currentIndex={currentIndex}
+            totalSegments={totalSegments}
+            onPrev={onPrev}
+            onNext={onNext}
+          />
           <CenterController controlsRef={controlsRef} centerY={centerY} />
-          {speechText ? <SpeechBubble3D centerY={centerY} text={speechText} /> : null}
+          {speechText ? (
+            <SpeechBubble3D
+              centerY={centerY}
+              text={speechText}
+              transitionKey={`${currentIndex ?? 'none'}:${speechText}`}
+              direction={bubbleDirection}
+            />
+          ) : null}
         </Canvas>
       </div>
     </div>
@@ -211,15 +251,60 @@ export function VRMCanvas({
 }
 
 /**
- * キャラクターの右側に浮かぶ吹き出し。drei の Html をワールド座標に貼り、DOM で見栄えを作る。
+ * キャラクターの頭上にワールド座標で浮かぶ吹き出し。drei の Html を使って DOM で見栄えを作る。
+ * 位置はモデル上半身 y からのオフセットで決め、頭部に被らない高さに置く。
  * centerY が null（VRM 未ロード等）の時は仮値で 0.4 を使う。
  */
-function SpeechBubble3D({ centerY, text }: { centerY: number | null; text: string }) {
-  const y = (centerY ?? 0.4) + 0.35
+interface SpeechBubbleItem {
+  key: string
+  text: string
+  phase: 'enter' | 'exit'
+  direction: 'up' | 'down'
+}
+
+function SpeechBubble3D({
+  centerY,
+  text,
+  transitionKey,
+  direction,
+}: {
+  centerY: number | null
+  text: string
+  transitionKey: string
+  direction: 'up' | 'down'
+}) {
+  // 上半身 y より 0.85 上＝頭の少し上。文字が頭部と被らないようにここで余裕を取る。
+  const y = (centerY ?? 0.4) + 0.85
+  const [items, setItems] = useState<SpeechBubbleItem[]>([{ key: transitionKey, text, phase: 'enter', direction }])
+
+  useEffect(() => {
+    setItems((current) => {
+      const active = current.find((item) => item.phase === 'enter')
+      if (active?.key === transitionKey) return current
+      const exiting = active ? [{ ...active, phase: 'exit' as const, direction }] : []
+      return [...exiting, { key: transitionKey, text, phase: 'enter', direction }]
+    })
+
+    const timer = setTimeout(() => {
+      setItems([{ key: transitionKey, text, phase: 'enter', direction }])
+    }, 180)
+    return () => clearTimeout(timer)
+  }, [direction, text, transitionKey])
+
   return (
-    <Html position={[0.5, y, 0]} center transform sprite distanceFactor={1.4} zIndexRange={[100, 0]}>
-      <div className="pointer-events-none w-[min(420px,70vw)] whitespace-pre-wrap break-words rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bubble-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--ui-text)] shadow-lg">
-        {text}
+    <Html position={[0, y, 0]} center transform sprite distanceFactor={1.4} zIndexRange={[100, 0]}>
+      <div className="pointer-events-none relative min-h-9 w-[min(260px,40vw)] select-none">
+        <div className="invisible whitespace-pre-wrap break-words px-3 py-1.5 text-[11px] leading-relaxed">{text}</div>
+        {items.map((item) => (
+          <div
+            key={`${item.phase}:${item.key}`}
+            className={`absolute inset-x-0 top-0 whitespace-pre-wrap break-words rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bubble-bg)] px-3 py-1.5 text-center text-[11px] leading-relaxed text-[var(--ui-text)] shadow-lg ${
+              item.phase === 'enter' ? `now-playing-enter-${item.direction}` : `now-playing-exit-${item.direction}`
+            }`}
+          >
+            {item.text}
+          </div>
+        ))}
       </div>
     </Html>
   )

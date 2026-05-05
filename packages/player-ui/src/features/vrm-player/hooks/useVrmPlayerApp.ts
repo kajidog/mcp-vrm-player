@@ -11,7 +11,13 @@ import {
 } from '../utils/vrmPayload'
 import { resolveVrmSource } from '../utils/vrmSource'
 import { useRevokableObjectUrl } from './useRevokableObjectUrl'
-import { fetchDefaultVrmOnServer, fetchVrmModelOnServer, resynthesizeSegmentOnServer } from './vrmPlayerToolClient'
+import {
+  fetchDefaultVrmOnServer,
+  fetchSegmentsAudioOnServer,
+  fetchSpeakerIconOnServer,
+  fetchVrmModelOnServer,
+  resynthesizeSegmentOnServer,
+} from './vrmPlayerToolClient'
 
 // `connecting` を除く「落ち着いた」表示状態。`applyPayload` の fallback に使う。
 type SettledStatus = Exclude<VrmPlayerStatus, 'connecting'>
@@ -137,6 +143,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [segments, setSegments] = useState<PoseSegment[]>([])
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
   const [activeModel, setActiveModel] = useState<VrmPlayerState['activeModel']>(null)
+  const [speakerIconUrl, setSpeakerIconUrl] = useState<string | undefined>(undefined)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -159,7 +166,54 @@ export function useVrmPlayerApp(): VrmPlayerState {
   // 「再生対象として設定されたセグメント列」を識別するためのバージョン番号。
   // モデル切替などで再生中に列が差し替わった場合、古い onended を無視するために使う。
   const playbackVersionRef = useRef(0)
+  const speakerIconRequestRef = useRef(0)
+  // ホストからツール入力 / 結果を一度でも受け取ったかどうか。
+  // 受け取った後に初期デフォルトの非同期適用が遅れて返ってきても上書きしないためのガード。
+  const toolInteractedRef = useRef(false)
   const { replaceObjectUrl } = useRevokableObjectUrl()
+
+  // speak_player は音声バイナリを返さないので、viewUUID 経由で取り直して
+  // index 整列でマージする。失敗した場合は audioBase64 なしで返し、推定時間で再生する。
+  const mergeSegmentAudio = async (segments: PoseSegment[], viewUUID: string): Promise<PoseSegment[]> => {
+    const currentApp = appRef.current
+    if (!currentApp) return segments
+    try {
+      const audio = await fetchSegmentsAudioOnServer(currentApp, viewUUID)
+      if (!audio) return segments
+      const byIndex = new Map(audio.segments.map((entry) => [entry.index, entry]))
+      return segments.map((segment, index) => {
+        const entry = byIndex.get(index)
+        if (!entry) return segment
+        return {
+          ...segment,
+          audioBase64: entry.audioBase64 ?? segment.audioBase64,
+          speedScale: entry.speedScale ?? segment.speedScale,
+          prePhonemeLength: entry.prePhonemeLength ?? segment.prePhonemeLength,
+          postPhonemeLength: entry.postPhonemeLength ?? segment.postPhonemeLength,
+        }
+      })
+    } catch (error) {
+      console.warn('[mergeSegmentAudio] fetch failed:', error)
+      return segments
+    }
+  }
+
+  const updateSpeakerIcon = async (speakerId: number | undefined): Promise<void> => {
+    const requestId = speakerIconRequestRef.current + 1
+    speakerIconRequestRef.current = requestId
+    const currentApp = appRef.current
+    if (!currentApp || speakerId === undefined) {
+      setSpeakerIconUrl(undefined)
+      return
+    }
+    try {
+      const nextIconUrl = await fetchSpeakerIconOnServer(currentApp, speakerId)
+      if (requestId === speakerIconRequestRef.current) setSpeakerIconUrl(nextIconUrl)
+    } catch (error) {
+      console.warn('[updateSpeakerIcon] speaker icon fetch failed:', error)
+      if (requestId === speakerIconRequestRef.current) setSpeakerIconUrl(undefined)
+    }
+  }
 
   const clearPoseTimer = () => {
     if (poseTimerRef.current !== null) {
@@ -397,13 +451,16 @@ export function useVrmPlayerApp(): VrmPlayerState {
   // サーバの `_resolve_default_vrm_for_player` を叩いてフォールバック表示を試みる。
   // - デフォルトが未設定（source: 'none'）→ 空表示
   // - デフォルトはあるが解決失敗 → エラー表示（reason をメッセージに含める）
-  const applyDefaultPayload = async (reason: string): Promise<void> => {
+  // `shouldAbort` は await 境界ごとにチェックされ、true を返したら以降の setState を行わずに早期 return する。
+  // これは「初期プリロード中にツール入力が割り込んできた場合」に古い結果でツールの状態を上書きしないために使う。
+  const applyDefaultPayload = async (reason: string, shouldAbort: () => boolean = () => false): Promise<void> => {
     const currentApp = appRef.current
     if (!currentApp) return
 
     try {
-      const defaultPayload = await fetchDefaultVrmOnServer(currentApp)
-      if (!defaultPayload) {
+      const resolved = await fetchDefaultVrmOnServer(currentApp)
+      if (shouldAbort()) return
+      if (!resolved) {
         clearToEmpty()
         return
       }
@@ -412,7 +469,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
         source: defaultSource,
         error,
         revokeUrl,
-      } = await resolveVrmSource(currentApp, defaultPayload, { isDefault: true })
+      } = await resolveVrmSource(currentApp, resolved.payload, { isDefault: true })
+      if (shouldAbort()) {
+        // 既に別系統の payload で表示が進んでいる時は、ここで作った Object URL は捨てる。
+        if (revokeUrl) URL.revokeObjectURL(revokeUrl)
+        return
+      }
       replaceObjectUrl(revokeUrl ?? null)
 
       if (!defaultSource || error) {
@@ -423,9 +485,25 @@ export function useVrmPlayerApp(): VrmPlayerState {
       }
 
       setResolvedSource(defaultSource)
+      // registry 経由のデフォルトには metadata があるので、active モデル表示と話者アイコンも合わせて反映する。
+      // config 由来のフォールバックでは metadata なしなので、active モデルは未設定のまま。
+      if (resolved.metadata) {
+        const meta = resolved.metadata
+        setActiveModel({
+          id: meta.id,
+          name: meta.name,
+          speakerId: meta.speakerId,
+          thumbnailUrl:
+            meta.thumbnailBase64 !== undefined
+              ? `data:${meta.thumbnailMimeType ?? 'image/png'};base64,${meta.thumbnailBase64}`
+              : undefined,
+        })
+        void updateSpeakerIcon(meta.speakerId)
+      }
       setStatus('ready')
       setErrorMsg('')
     } catch (error) {
+      if (shouldAbort()) return
       setResolvedSource(null)
       setStatus('error')
       setErrorMsg(`${reason}。デフォルト VRM も取得できませんでした: ${String(error)}`)
@@ -472,12 +550,14 @@ export function useVrmPlayerApp(): VrmPlayerState {
 
       // ホストがツールを呼び始めた段階。引数から先行プレビューできるか試す。
       createdApp.ontoolinput = async (params) => {
+        toolInteractedRef.current = true
         setStatus('waiting')
         await applyPayload(extractPayloadFromInput(params), 'waiting')
       }
 
       // ツール結果到着。エラーなら即エラー表示、それ以外はペイロードを解決する。
       createdApp.ontoolresult = async (result: CallToolResult) => {
+        toolInteractedRef.current = true
         if (result.isError) {
           stopPlayback()
           setSegments([])
@@ -496,18 +576,25 @@ export function useVrmPlayerApp(): VrmPlayerState {
         // 結果に含まれる vrmModel から表示中モデル情報を更新する（モデル切替時の話者解決に使う）。
         const meta = readToolMeta(result)
         const structured = result.structuredContent as Record<string, unknown> | undefined
+        let hasVrmModel = false
         if (structured && typeof structured === 'object' && 'vrmModel' in structured) {
           const vm = structured.vrmModel as Record<string, unknown> | undefined
           if (vm && typeof vm.id === 'string' && typeof vm.name === 'string' && typeof vm.speakerId === 'number') {
+            hasVrmModel = true
             setActiveModel({ id: vm.id, name: vm.name, speakerId: vm.speakerId, thumbnailUrl: readDataUrl(vm) })
           }
         }
 
-        // speak_player の新形式は segments[].pose と audioBase64 を含む。
-        // 音声付きセグメントがあれば onended 駆動で順次再生する。
+        // speak_player の新形式は segments[].pose を含むがレスポンスサイズの都合で
+        // 音声バイナリは含めない。viewUUID で `_get_player_audio_for_player` を後追い
+        // 取得し、index 整列でマージしてから再生を始める。
         const nextSegments = extractPoseSegmentsFromResult(result)
         if (nextSegments) {
-          startPlayback(nextSegments, { autoPlay: consumeAutoPlay(meta) })
+          if (!hasVrmModel) setActiveModel(null)
+          const viewUUID = typeof meta.viewUUID === 'string' && meta.viewUUID.trim() ? meta.viewUUID : undefined
+          const segmentsForPlayback = viewUUID ? await mergeSegmentAudio(nextSegments, viewUUID) : nextSegments
+          startPlayback(segmentsForPlayback, { autoPlay: consumeAutoPlay(meta) })
+          void updateSpeakerIcon(segmentsForPlayback[0]?.speaker)
         } else if (isPlayerToolResult(result)) {
           stopPlayback()
           setSegments([])
@@ -536,8 +623,14 @@ export function useVrmPlayerApp(): VrmPlayerState {
   })
 
   // App ハンドルが確立した直後は「ツール入力待ち」へ遷移させる。
+  // 加えて、まだツール入出力が無いうちにデフォルト VRM をプリロードして
+  // モデルピッカーに「現在のモデル」が見える状態を作る（指定なしで開かれた時のフォールバック）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: applyDefaultPayload は ref ベースのクロージャで安定
   useEffect(() => {
-    if (app) setStatus('waiting')
+    if (!app) return
+    setStatus('waiting')
+    if (toolInteractedRef.current) return
+    void applyDefaultPayload('プレイヤー初期化時のデフォルト VRM 読み込み', () => toolInteractedRef.current)
   }, [app])
 
   useEffect(() => {
@@ -623,6 +716,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
             ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
             : undefined,
       })
+      void updateSpeakerIcon(metadata.speakerId)
       setStatus('ready')
       setErrorMsg('')
 
@@ -649,6 +743,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     currentTime,
     duration,
     currentSegmentText: currentSegmentIndex !== null ? (segments[currentSegmentIndex]?.text ?? null) : null,
+    speakerIconUrl,
     activeModel,
     isPlaying: currentSegmentIndex !== null && !paused,
     canReplay: currentSegmentIndex === null && segments.length > 0,

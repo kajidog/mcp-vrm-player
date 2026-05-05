@@ -108,6 +108,7 @@ export function VRMPlayer({
           onError={onModelError}
           pose={presetPose}
           speechText={speechText}
+          currentIndex={currentIndex}
           fullscreen={fullscreen}
           hasSegments={hasSegments}
           onPrev={onPrev}

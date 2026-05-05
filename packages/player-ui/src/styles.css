@@ -48,7 +48,6 @@ body,
 
 body {
   min-height: 0;
-  overflow: hidden;
   background: var(--ui-bg);
   color: var(--ui-text);
   font-size: 14px;

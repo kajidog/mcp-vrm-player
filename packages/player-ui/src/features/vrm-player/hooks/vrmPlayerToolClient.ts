@@ -29,8 +29,15 @@ function assertNoToolError(result: { isError?: boolean; content?: unknown }): vo
  *   { source: 'none' }
  *
  * `source: 'none'` または vrmBase64 が無い場合は null を返し、UI は空表示にする。
+ * registry 経由のデフォルトでは metadata（speakerId 等）も合わせて返し、
+ * 呼び出し側で active model 表示や話者アイコンに利用できるようにする。
  */
-export async function fetchDefaultVrmOnServer(app: App): Promise<VrmPayload | null> {
+export interface DefaultVrmResolution {
+  payload: VrmPayload
+  metadata?: VrmListEntry
+}
+
+export async function fetchDefaultVrmOnServer(app: App): Promise<DefaultVrmResolution | null> {
   const result = await app.callServerTool({
     name: '_resolve_default_vrm_for_player',
     arguments: {},
@@ -42,6 +49,7 @@ export async function fetchDefaultVrmOnServer(app: App): Promise<VrmPayload | nu
 
   const parsed = JSON.parse(payload) as {
     source?: 'registry' | 'config' | 'none'
+    metadata?: VrmListEntry
     vrmUrl?: string
     vrmBase64?: string
     vrmMimeType?: string
@@ -49,9 +57,52 @@ export async function fetchDefaultVrmOnServer(app: App): Promise<VrmPayload | nu
 
   if (parsed.source === 'none' || (!parsed.vrmUrl && !parsed.vrmBase64)) return null
   return {
-    vrmUrl: parsed.vrmUrl,
-    vrmBase64: parsed.vrmBase64,
-    vrmMimeType: parsed.vrmMimeType ?? 'model/gltf-binary',
+    payload: {
+      vrmUrl: parsed.vrmUrl,
+      vrmBase64: parsed.vrmBase64,
+      vrmMimeType: parsed.vrmMimeType ?? 'model/gltf-binary',
+    },
+    metadata: parsed.metadata,
+  }
+}
+
+export interface SegmentAudio {
+  index: number
+  audioBase64?: string
+  speedScale?: number
+  prePhonemeLength?: number
+  postPhonemeLength?: number
+}
+
+/**
+ * speak_player 結果は音声バイナリを含まないので、viewUUID で別途取得する。
+ * サーバ側はキャッシュ済みの合成結果を返すだけなので呼び出しコストは低い。
+ */
+export async function fetchSegmentsAudioOnServer(
+  app: App,
+  viewUUID: string
+): Promise<{ audioMimeType: string; segments: SegmentAudio[] } | null> {
+  const result = await app.callServerTool({
+    name: '_get_player_audio_for_player',
+    arguments: { viewUUID },
+  })
+  if (result.isError) return null
+
+  const payload = getTextPayload(result.content)
+  if (!payload) return null
+
+  try {
+    const parsed = JSON.parse(payload) as {
+      audioMimeType?: string
+      segments?: SegmentAudio[]
+    }
+    if (!Array.isArray(parsed.segments)) return null
+    return {
+      audioMimeType: parsed.audioMimeType ?? 'audio/wav',
+      segments: parsed.segments,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -94,13 +145,20 @@ export async function resynthesizeSegmentOnServer(
   }
 }
 
-interface VrmListEntry {
+export interface VrmListEntry {
   id: string
   name: string
   speakerId: number
   isDefault?: boolean
   thumbnailBase64?: string
   thumbnailMimeType?: string
+}
+
+interface SpeakerEntry {
+  id: number
+  name: string
+  characterName: string
+  uuid: string
 }
 
 /** 登録済み VRM 一覧の軽量取得（プレイヤー上のモデルピッカー用）。 */
@@ -137,6 +195,36 @@ export async function fetchVrmModelOnServer(
   const parsed = JSON.parse(payload) as { metadata?: VrmListEntry; vrmUrl?: string }
   if (!parsed.metadata || !parsed.vrmUrl) throw new Error('Invalid VRM metadata response')
   return { metadata: parsed.metadata, vrmUrl: parsed.vrmUrl }
+}
+
+export async function fetchSpeakerIconOnServer(app: App, speakerId: number): Promise<string | undefined> {
+  const speakersResult = await app.callServerTool({
+    name: '_get_speakers_for_player',
+    arguments: {},
+  })
+  assertNoToolError(speakersResult)
+
+  const speakersPayload = getTextPayload(speakersResult.content)
+  if (!speakersPayload) return undefined
+
+  const speakers = JSON.parse(speakersPayload) as SpeakerEntry[]
+  const speaker = speakers.find((entry) => entry.id === speakerId)
+  if (!speaker?.uuid) return undefined
+
+  const iconResult = await app.callServerTool({
+    name: '_get_speaker_icon_for_player',
+    arguments: { speakerUuid: speaker.uuid },
+  })
+  assertNoToolError(iconResult)
+
+  const iconPayload = getTextPayload(iconResult.content)
+  if (!iconPayload) return undefined
+  const parsed = JSON.parse(iconPayload) as { portrait?: string | null }
+  const portrait = parsed.portrait
+  if (!portrait) return undefined
+  // VOICEVOX の /speaker_info は portrait を生 base64 で返すので、
+  // <img src> へ流す前に data URL へ整える。すでに data: なら変換しない。
+  return portrait.startsWith('data:') ? portrait : `data:image/png;base64,${portrait}`
 }
 
 export interface PlayerSettings {

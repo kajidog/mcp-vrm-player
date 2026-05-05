@@ -72,6 +72,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     }): Promise<CallToolResult> => {
       try {
         const model = resolveVrmModel(runtime, modelId)
+        const speakerId = model?.speakerId ?? config.defaultSpeaker
         const baseSegments: ResolvedSegment[] = segments.map((s, index) => {
           if (!s.text?.trim()) {
             throw new Error(`segments[${index}].text is required`)
@@ -79,17 +80,19 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
           const explicitSpeedScale = s.speedScale ?? speedScale
           return {
             text: s.text,
-            speaker: model.speakerId,
+            speaker: speakerId,
             speedScale: explicitSpeedScale,
             explicitSpeedScale,
             pose: s.pose,
           }
         })
 
-        const speakerNameMap = await runtime.resolveSpeakerNames([model.speakerId])
+        const speakerNameMap = await runtime.resolveSpeakerNames([speakerId])
         const viewUUID = randomUUID()
 
-        // 各セグメントを並列合成。失敗したセグメントは text のみ残し、UI側で順次フォールバック表示する。
+        // 各セグメントを並列合成し、結果は audio キャッシュに格納するだけ。
+        // 音声バイナリはこのレスポンスには含めず、UI 側が viewUUID で
+        // `_get_player_audio_for_player` を呼んで取得する（1MB 制限回避）。
         const synthesized = await Promise.all(
           baseSegments.map(async (s) => {
             try {
@@ -99,14 +102,13 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 speedScale: s.speedScale,
               })
               return {
-                audioBase64: result.audioBase64 as string | undefined,
                 speedScale: result.speedScale,
                 prePhonemeLength: result.prePhonemeLength,
                 postPhonemeLength: result.postPhonemeLength,
               }
             } catch (error) {
               console.warn('[speak_player] synthesize failed for segment:', error)
-              return { audioBase64: undefined }
+              return {}
             }
           })
         )
@@ -117,6 +119,12 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             speaker: s.speaker,
             speakerName: speakerNameMap.get(s.speaker),
             speedScale: synthesized[index].speedScale ?? s.speedScale ?? config.defaultSpeedScale,
+            ...(synthesized[index].prePhonemeLength !== undefined
+              ? { prePhonemeLength: synthesized[index].prePhonemeLength }
+              : {}),
+            ...(synthesized[index].postPhonemeLength !== undefined
+              ? { postPhonemeLength: synthesized[index].postPhonemeLength }
+              : {}),
             ...(s.pose !== undefined ? { pose: s.pose } : {}),
           })),
           updatedAt: Date.now(),
@@ -138,7 +146,6 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             ? { postPhonemeLength: synthesized[index].postPhonemeLength }
             : {}),
           ...(s.pose !== undefined ? { pose: s.pose } : {}),
-          ...(synthesized[index].audioBase64 ? { audioBase64: synthesized[index].audioBase64 } : {}),
         }))
         const structured: Record<string, unknown> = {
           viewUUID,
@@ -148,14 +155,16 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
           engineId: engine.id,
           engineDisplayName: engine.displayName,
           capabilities,
-          vrmModel: {
-            id: model.id,
-            name: model.name,
-            speakerId: model.speakerId,
-            vrmUrl: getVrmModelUrl(config, model.id),
-            ...(model.thumbnailBase64 ? { thumbnailBase64: model.thumbnailBase64 } : {}),
-            ...(model.thumbnailMimeType ? { thumbnailMimeType: model.thumbnailMimeType } : {}),
-          },
+          ...(model
+            ? {
+                vrmModel: {
+                  id: model.id,
+                  name: model.name,
+                  speakerId: model.speakerId,
+                  vrmUrl: getVrmModelUrl(config, model.id),
+                },
+              }
+            : {}),
         }
         return {
           content: [
@@ -180,9 +189,5 @@ function resolveVrmModel(runtime: PlayerRuntime, modelId: string | undefined) {
     if (!model) throw new Error(`VRM model not found: ${modelId}`)
     return model
   }
-  const defaultModel = runtime.vrmRegistry.getDefault()
-  if (!defaultModel) {
-    throw new Error('No default VRM is registered. Pass modelId or set a default via the registry.')
-  }
-  return defaultModel
+  return runtime.vrmRegistry.getDefault()
 }

@@ -99,7 +99,7 @@ export function McpApp() {
             ? (player.segments[player.currentSegmentIndex]?.speakerName ?? null)
             : (player.segments[0]?.speakerName ?? null)
         }
-        thumbnailUrl={player.activeModel?.thumbnailUrl}
+        thumbnailUrl={player.speakerIconUrl}
         fullscreen={fullscreen}
         canFullscreen={displayMode.canFullscreen}
         onSwitchVrm={player.switchVrm}

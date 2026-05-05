@@ -76,13 +76,8 @@ export function SettingsView({ app, busy, onBack, onOpenModels, onApplied }: Set
           ← プレイヤーに戻る
         </button>
         <div className="text-sm font-semibold text-[var(--ui-text)]">設定</div>
-        <button
-          type="button"
-          onClick={onOpenModels}
-          className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
-        >
-          モデル管理
-        </button>
+
+        <div />
       </div>
 
       <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">

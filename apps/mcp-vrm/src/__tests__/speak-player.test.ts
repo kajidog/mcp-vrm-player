@@ -71,6 +71,7 @@ function buildHarness(registry: VrmRegistryStore) {
     getSessionState: (viewUUID, sessionId) => sessionStates.get(viewUUID ?? sessionId ?? 'global'),
     getSessionStateByKey: (key) => sessionStates.get(key),
     vrmRegistry: registry,
+    playerSettings: {} as PlayerRuntime['playerSettings'],
   }
 
   registerSpeakPlayerTool(
@@ -154,16 +155,22 @@ describe('speak_player Phase 5', () => {
     expect(structured.segments[0].speaker).toBe(3)
   })
 
-  it('segments 指定でデフォルトも未登録ならエラー', async () => {
+  it('segments 指定でデフォルトも未登録なら CLI デフォルト話者だけ返り、音声バイナリは含まない', async () => {
     const harness = buildHarness(registry)
 
     const result = await harness.invoke({
       segments: [{ text: 'hello' }],
     })
 
-    expect(result.isError).toBe(true)
-    const text = (result.content?.[0] as { type: 'text'; text: string }).text
-    expect(text).toMatch(/No default VRM/)
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      vrmModel?: unknown
+      segments: Array<{ speaker: number; audioBase64?: string }>
+    }
+    expect(structured.vrmModel).toBeUndefined()
+    expect(structured.segments[0]).toMatchObject({ speaker: 1 })
+    // audio binary は viewUUID で別途 `_get_player_audio_for_player` から取る前提。
+    expect(structured.segments[0].audioBase64).toBeUndefined()
   })
 
   it('未登録の modelId はエラー', async () => {
@@ -179,17 +186,21 @@ describe('speak_player Phase 5', () => {
     expect(text).toMatch(/VRM model not found/)
   })
 
-  it('結果に vrmBase64 は含めない（HTTP 配信前提）', async () => {
+  it('結果に vrmBase64 / thumbnailBase64 / audioBase64 は含めない（UI 側がツール経由で取得）', async () => {
     const model = await registry.register({ name: 'Alice', speakerId: 1, vrmBase64: SAMPLE_VRM_BASE64 })
     const harness = buildHarness(registry)
 
     const result = await harness.invoke({
       modelId: model.id,
-      segments: [{ text: 'Hi' }],
+      segments: [{ text: 'Hi' }, { text: 'There' }],
     })
 
     const json = JSON.stringify(result)
     expect(json).not.toContain('vrmBase64')
+    expect(json).not.toContain('thumbnailBase64')
+    expect(json).not.toContain('audioBase64')
+    // 1MB 制限に引っかからないよう、結果は十分軽量であること。
+    expect(Buffer.byteLength(json, 'utf-8')).toBeLessThan(1024 * 1024)
   })
 
   it('全セグメントの speaker はモデル登録時の speakerId に統一される', async () => {

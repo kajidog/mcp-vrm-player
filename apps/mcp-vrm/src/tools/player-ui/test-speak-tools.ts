@@ -16,7 +16,7 @@ const DEFAULT_TEST_TEXT = 'こんにちは、これはテスト音声です。'
 export function registerTestSpeakTools(context: PlayerUIToolContext): void {
   const { deps, shared } = context
   const { server, disabledTools } = deps
-  const { playerResourceUri, synthesizeWithCache } = shared
+  const { playerResourceUri, synthesizeWithCache, getSessionState } = shared
 
   registerAppToolIfEnabled(
     server,
@@ -51,6 +51,86 @@ export function registerTestSpeakTools(context: PlayerUIToolContext): void {
                 text: finalText,
                 speakerId,
                 speakerName: result.speakerName,
+              }),
+            },
+          ],
+        }
+      } catch (error) {
+        return createErrorResponse(error)
+      }
+    }
+  )
+
+  // speak_player の結果に audio を含めない代わりに、UI が viewUUID で
+  // 各セグメントの base64 音声をまとめて取得するための内部ツール。
+  // 1MB 制限に引っかからないよう、AI 向けの公開ツールではなく app-only にする。
+  registerAppToolIfEnabled(
+    server,
+    disabledTools,
+    '_get_player_audio_for_player',
+    {
+      title: 'Get Player Audio (Player)',
+      description:
+        'Fetch base64 audio for all segments of a previously created speak_player view. Synthesis is cached per segment so repeated calls return immediately.',
+      inputSchema: {
+        viewUUID: z.string().min(1).describe('viewUUID returned by speak_player'),
+      },
+      _meta: {
+        ui: { resourceUri: playerResourceUri, visibility: ['app'] },
+      },
+    },
+    async ({ viewUUID }: { viewUUID: string }): Promise<CallToolResult> => {
+      try {
+        const state = getSessionState(viewUUID)
+        if (!state) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: 'session not found', viewUUID }),
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        const segments = await Promise.all(
+          state.segments.map(async (segment, index) => {
+            try {
+              const result = await synthesizeWithCache({
+                text: segment.text,
+                speaker: segment.speaker,
+                audioQuery: segment.audioQuery,
+                speedScale: segment.speedScale,
+                intonationScale: segment.intonationScale,
+                volumeScale: segment.volumeScale,
+                prePhonemeLength: segment.prePhonemeLength,
+                postPhonemeLength: segment.postPhonemeLength,
+                pauseLengthScale: segment.pauseLengthScale,
+                accentPhrases: segment.accentPhrases,
+              })
+              return {
+                index,
+                audioBase64: result.audioBase64,
+                speedScale: result.speedScale,
+                prePhonemeLength: result.prePhonemeLength,
+                postPhonemeLength: result.postPhonemeLength,
+              }
+            } catch (error) {
+              console.warn('[_get_player_audio_for_player] synthesize failed:', error)
+              return { index, audioBase64: undefined as string | undefined }
+            }
+          })
+        )
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                viewUUID,
+                audioMimeType: 'audio/wav',
+                segments,
               }),
             },
           ],

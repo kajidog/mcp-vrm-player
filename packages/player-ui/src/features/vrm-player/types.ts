@@ -49,6 +49,7 @@ export interface VrmPlayerState {
   duration: number
   // 吹き出し表示用に切り出した「現在再生中のセグメントのテキスト」。
   currentSegmentText: string | null
+  speakerIconUrl?: string
   // 現在表示している登録モデル情報（モデル切替で更新）。
   activeModel: { id: string; name: string; speakerId: number; thumbnailUrl?: string } | null
   // 表示モデルを別の登録モデルへ切替し、必要なら現セグメントを新 speaker で再合成する。
