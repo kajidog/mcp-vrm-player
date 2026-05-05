@@ -132,6 +132,23 @@ body {
   animation: vv-spin 0.9s linear infinite;
 }
 
+.initial-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 0.68);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-color-scheme: dark) {
+  .initial-loading-overlay {
+    background: rgb(0 0 0 / 0.5);
+  }
+}
+
 .now-playing-enter-up {
   animation: vv-enter-up 0.16s ease-out both;
 }

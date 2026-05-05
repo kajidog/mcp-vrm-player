@@ -9,9 +9,11 @@ type View = 'player' | 'settings' | 'register' | 'edit'
 
 function LoadingView({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-2 p-3">
-      <div className="vv-spinner" />
-      {label}
+    <div className="initial-loading-overlay">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg)] px-4 py-3 text-sm font-medium text-[var(--ui-text)] shadow-lg">
+        <div className="vv-spinner" />
+        {label}
+      </div>
     </div>
   )
 }
@@ -78,7 +80,7 @@ export function McpApp() {
   }
 
   return (
-    <div data-display-mode={displayMode.displayMode}>
+    <div data-display-mode={displayMode.displayMode} className="relative">
       <VRMPlayer
         app={player.app}
         source={player.source}
@@ -122,6 +124,7 @@ export function McpApp() {
           else void displayMode.requestFullscreen()
         }}
       />
+      {player.status === 'waiting' && player.loadingModel ? <LoadingView label="Loading model..." /> : null}
     </div>
   )
 }

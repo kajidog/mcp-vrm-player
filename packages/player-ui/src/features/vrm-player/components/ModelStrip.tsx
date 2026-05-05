@@ -53,20 +53,20 @@ export function ModelStrip({ app, activeModelId, busy, refreshKey, onSelect, onA
               disabled={busy || active}
               title={`${item.name} / 話者${item.speakerId}`}
               onClick={() => onSelect(item.id)}
-              className={`flex h-10 min-w-10 items-center justify-center overflow-hidden rounded-md border px-2 text-xs font-semibold ${
+              className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 p-0 text-xs font-semibold ${
                 active
-                  ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-white'
-                  : 'border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] hover:border-[var(--ui-accent)]'
+                  ? 'border-[var(--ui-accent)] bg-[var(--ui-button-bg)] text-[var(--ui-text)]'
+                  : 'border-transparent bg-[var(--ui-button-bg)] text-[var(--ui-text)] ring-1 ring-[var(--ui-border)] hover:border-[var(--ui-accent)]'
               } disabled:opacity-70`}
             >
               {item.thumbnailBase64 ? (
                 <img
                   src={`data:${item.thumbnailMimeType ?? 'image/png'};base64,${item.thumbnailBase64}`}
                   alt={item.name}
-                  className="h-10 w-10 object-cover"
+                  className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="max-w-20 truncate">{shortName(item.name)}</span>
+                <span className="max-w-9 truncate px-1">{shortName(item.name)}</span>
               )}
             </button>
             <button

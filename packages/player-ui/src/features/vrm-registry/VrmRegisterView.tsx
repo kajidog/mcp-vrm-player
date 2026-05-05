@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DeleteIcon } from '~/icons'
 import { DEFAULT_POSE_ID, POSE_PRESETS, type PosePresetId } from '../poses/presets'
 import { VRMCanvas } from '../vrm-player/components/VRMCanvas'
 import { useVrmFileDrop } from '../vrm-player/hooks/useVrmFileDrop'
@@ -166,7 +167,7 @@ const INITIAL_FORM: FormState = {
  */
 export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterViewProps) {
   const isEdit = modelId !== null
-  const { vrms, register, update, replaceBinary } = useVrmRegistry(app)
+  const { vrms, register, update, replaceBinary, remove } = useVrmRegistry(app)
   const { speakers, loading: speakersLoading, error: speakersError } = useSpeakers(app)
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
@@ -178,6 +179,9 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
   const [loadingExisting, setLoadingExisting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [testingLabel, setTestingLabel] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
   // プレビュー時の確認用ポーズ。保存する値ではないので form 外に持つ。
@@ -337,6 +341,21 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
     }
   }, [form, vrmBuffer, isEdit, modelId, register, update, replaceBinary, onSaved])
 
+  const handleDelete = useCallback(async () => {
+    if (!isEdit || !modelId) return
+    setDeleteError(null)
+    setDeleting(true)
+    try {
+      await remove(modelId)
+      setConfirmDeleteOpen(false)
+      onSaved()
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeleting(false)
+    }
+  }, [isEdit, modelId, remove, onSaved])
+
   const handleTestSpeak = useCallback(
     async (preset: { label: string; text: string }) => {
       if (form.speakerId === null) {
@@ -381,7 +400,9 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
 
   return (
     <div
-      className={`space-y-3 p-3 ${dragHighlight ? 'outline-2 outline-offset-[-6px] outline-[var(--ui-accent)]' : ''}`}
+      className={`relative space-y-3 p-3 ${
+        dragHighlight ? 'outline-2 outline-offset-[-6px] outline-[var(--ui-accent)]' : ''
+      }`}
       {...dropProps}
     >
       <input {...drop.inputProps} />
@@ -394,14 +415,30 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
           ← キャンセル
         </button>
         <div className="text-sm font-semibold text-[var(--ui-text)]">{isEdit ? 'VRM を編集' : 'VRM を追加'}</div>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving || loadingExisting}
-          className="rounded-md border border-[var(--ui-accent)] bg-[var(--ui-accent)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--ui-accent-hover)] disabled:opacity-50"
-        >
-          {saving ? '保存中...' : '保存'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {isEdit ? (
+            <button
+              type="button"
+              title="削除"
+              onClick={() => {
+                setDeleteError(null)
+                setConfirmDeleteOpen(true)
+              }}
+              disabled={saving || loadingExisting || deleting}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-danger)] hover:border-[var(--ui-danger)] disabled:opacity-50"
+            >
+              <DeleteIcon />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || loadingExisting || deleting}
+            className="rounded-md border border-[var(--ui-accent)] bg-[var(--ui-accent)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--ui-accent-hover)] disabled:opacity-50"
+          >
+            {saving ? '保存中...' : '保存'}
+          </button>
+        </div>
       </div>
 
       {loadingExisting ? (
@@ -413,6 +450,10 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
 
       {saveError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>
+      ) : null}
+
+      {deleteError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{deleteError}</div>
       ) : null}
 
       {/* VRM ファイル / プレビュー */}
@@ -561,6 +602,36 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
         </div>
         {testError ? <div className="text-[11px] text-red-600">{testError}</div> : null}
       </div>
+
+      {confirmDeleteOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg)] p-4 shadow-xl">
+            <div className="text-sm font-semibold text-[var(--ui-text)]">VRM を削除しますか？</div>
+            <div className="mt-2 text-xs leading-relaxed text-[var(--ui-text-secondary)]">
+              「{form.name || vrmFileName || modelId}」を一覧から削除します。VRM ファイルも削除されます。
+            </div>
+            {deleteError ? <div className="mt-3 text-xs text-red-600">{deleteError}</div> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOpen(false)}
+                disabled={deleting}
+                className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)] disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="rounded-md border border-[var(--ui-danger)] bg-[var(--ui-danger)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {deleting ? '削除中...' : '削除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

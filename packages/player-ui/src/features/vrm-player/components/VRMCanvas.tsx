@@ -165,7 +165,7 @@ function WheelTrackController({
       dom.removeEventListener('pointerup', onPointerUp)
       dom.removeEventListener('pointercancel', onPointerUp)
     }
-  }, [camera, controlsRef, gl, hasSegments, onNext, onPrev])
+  }, [camera, controlsRef, currentIndex, gl, hasSegments, onNext, onPrev, totalSegments])
 
   return null
 }
@@ -191,6 +191,8 @@ export function VRMCanvas({
   const colors = SCENE_COLORS[colorScheme]
   // VRMScene からセンタリング情報（上半身 y）を受け取って、カメラ追従と吹き出し位置に流す。
   const [centerY, setCenterY] = useState<number | null>(null)
+  const [headPosition, setHeadPosition] = useState<[number, number, number] | null>(null)
+  const sourceKey = `${source?.src ?? ''}:${source?.data?.byteLength ?? 0}:${source?.label ?? ''}`
   const previousIndexRef = useRef<number | null>(null)
   const bubbleDirection =
     currentIndex !== null && previousIndexRef.current !== null && currentIndex < previousIndexRef.current
@@ -200,6 +202,12 @@ export function VRMCanvas({
   useEffect(() => {
     if (currentIndex !== null) previousIndexRef.current = currentIndex
   }, [currentIndex])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sourceKey intentionally clears stale model anchors while the next VRM loads
+  useEffect(() => {
+    setCenterY(null)
+    setHeadPosition(null)
+  }, [sourceKey])
 
   return (
     <div
@@ -222,7 +230,15 @@ export function VRMCanvas({
           <directionalLight position={[1.5, 2.5, 2]} intensity={1.5} />
           <directionalLight position={[-1, 1.5, -1]} intensity={0.5} />
           <gridHelper args={[6, 12, colors.gridA, colors.gridB]} position={[0, -1, 0]} />
-          {source ? <VRMScene source={source} onError={onError} pose={pose} onCenterReady={setCenterY} /> : null}
+          {source ? (
+            <VRMScene
+              source={source}
+              onError={onError}
+              pose={pose}
+              onCenterReady={setCenterY}
+              onHeadReady={setHeadPosition}
+            />
+          ) : null}
           {/* 仮置き target。ロード完了後に CenterController が VRM の上半身高さに更新する。 */}
           {/* 左ドラッグ=回転 / 右ドラッグ=パン。ズームは WheelTrackController で割り当てる。 */}
           <OrbitControls ref={controlsRef} enablePan enableZoom={false} target={[0, 1.1, 0]} />
@@ -239,6 +255,7 @@ export function VRMCanvas({
           {speechText ? (
             <SpeechBubble3D
               centerY={centerY}
+              headPosition={headPosition}
               text={speechText}
               transitionKey={`${currentIndex ?? 'none'}:${speechText}`}
               direction={bubbleDirection}
@@ -264,17 +281,21 @@ interface SpeechBubbleItem {
 
 function SpeechBubble3D({
   centerY,
+  headPosition,
   text,
   transitionKey,
   direction,
 }: {
   centerY: number | null
+  headPosition: [number, number, number] | null
   text: string
   transitionKey: string
   direction: 'up' | 'down'
 }) {
-  // 上半身 y より 0.85 上＝頭の少し上。文字が頭部と被らないようにここで余裕を取る。
-  const y = (centerY ?? 0.4) + 0.85
+  // 吹き出し左下を「顔の少し右上」に置く。頭ボーンが取れない時だけ従来の上半身基準に戻す。
+  const position: [number, number, number] = headPosition
+    ? [headPosition[0] + 0.16, headPosition[1] + 0.18, headPosition[2]]
+    : [0, (centerY ?? 0.4) + 0.85, 0]
   const [items, setItems] = useState<SpeechBubbleItem[]>([{ key: transitionKey, text, phase: 'enter', direction }])
 
   useEffect(() => {
@@ -292,8 +313,8 @@ function SpeechBubble3D({
   }, [direction, text, transitionKey])
 
   return (
-    <Html position={[0, y, 0]} center transform sprite distanceFactor={1.4} zIndexRange={[100, 0]}>
-      <div className="pointer-events-none relative min-h-9 w-[min(260px,40vw)] select-none">
+    <Html position={position} zIndexRange={[100, 0]}>
+      <div className="pointer-events-none relative min-h-9 w-[min(260px,40vw)] -translate-y-full select-none">
         <div className="invisible whitespace-pre-wrap break-words px-3 py-1.5 text-[11px] leading-relaxed">{text}</div>
         {items.map((item) => (
           <div

@@ -13,13 +13,15 @@ interface VRMSceneProps {
   pose?: PosePresetId
   // VRM ロード完了後、Canvas へ「キャラ上半身付近の y」を通知する。
   onCenterReady?: (y: number) => void
+  // VRM ロード完了後、Canvas へ「頭ボーンのワールド座標」を通知する。
+  onHeadReady?: (position: [number, number, number]) => void
 }
 
 /**
  * 渡された VrmSource を three.js シーンに常駐表示するコンポーネント。
  * `source.data`（バイナリ）か `source.src`（URL）のいずれかからロードする。
  */
-export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps) {
+export function VRMScene({ source, onError, pose, onCenterReady, onHeadReady }: VRMSceneProps) {
   const [vrm, setVrm] = useState<VRM | null>(null)
   // lookAt の追従先として現在のカメラを使う（vrm.update() が毎フレーム参照する）。
   const { camera } = useThree()
@@ -41,6 +43,11 @@ export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps
   useEffect(() => {
     onCenterReadyRef.current = onCenterReady
   }, [onCenterReady])
+
+  const onHeadReadyRef = useRef(onHeadReady)
+  useEffect(() => {
+    onHeadReadyRef.current = onHeadReady
+  }, [onHeadReady])
 
   useEffect(() => {
     let disposed = false
@@ -91,6 +98,14 @@ export function VRMScene({ source, onError, pose, onCenterReady }: VRMSceneProps
         upperBoneNode.getWorldPosition(world)
         // primitive の position=[0,-1,0] による平行移動を反映。
         onCenterReadyRef.current?.(world.y - 1)
+      }
+
+      const headNode = loaded.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Head)
+      if (headNode) {
+        const world = new Vector3()
+        headNode.getWorldPosition(world)
+        // primitive の position=[0,-1,0] による平行移動を反映。
+        onHeadReadyRef.current?.([world.x, world.y - 1, world.z])
       }
     }
 

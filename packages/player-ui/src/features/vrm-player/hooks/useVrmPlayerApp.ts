@@ -630,7 +630,10 @@ export function useVrmPlayerApp(): VrmPlayerState {
     if (!app) return
     setStatus('waiting')
     if (toolInteractedRef.current) return
-    void applyDefaultPayload('プレイヤー初期化時のデフォルト VRM 読み込み', () => toolInteractedRef.current)
+    setLoadingModel(true)
+    void applyDefaultPayload('プレイヤー初期化時のデフォルト VRM 読み込み', () => toolInteractedRef.current).finally(
+      () => setLoadingModel(false)
+    )
   }, [app])
 
   useEffect(() => {
