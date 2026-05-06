@@ -8,8 +8,6 @@ interface TransportBarProps {
   totalSegments: number
   currentTime: number
   duration: number
-  speakerName: string | null
-  thumbnailUrl?: string
   onPlay: () => void
   onPause: () => void
   onPrev: () => void
@@ -32,8 +30,6 @@ export function TransportBar({
   totalSegments,
   currentTime,
   duration,
-  speakerName,
-  thumbnailUrl,
   onPlay,
   onPause,
   onPrev,
@@ -43,15 +39,7 @@ export function TransportBar({
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-2">
-      <div className="hidden min-w-0 items-center gap-1.5 sm:flex">
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
-        ) : (
-          <div className="h-6 w-6 shrink-0 rounded-full border border-[var(--ui-border)] bg-[var(--ui-button-bg)]" />
-        )}
-        <span className="max-w-28 truncate text-xs text-[var(--ui-text)]">{speakerName ?? '-'}</span>
-      </div>
-      <div className="hidden whitespace-nowrap text-xs tabular-nums text-[var(--ui-text-secondary)] md:block">
+      <div className="whitespace-nowrap text-xs tabular-nums text-[var(--ui-text-secondary)]">
         {trackLabel} · {formatTime(currentTime)} / {formatTime(duration)}
       </div>
       <button

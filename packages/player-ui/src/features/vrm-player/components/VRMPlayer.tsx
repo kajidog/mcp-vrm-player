@@ -21,8 +21,6 @@ interface VRMPlayerProps {
   totalSegments: number
   currentTime: number
   duration: number
-  speakerName: string | null
-  thumbnailUrl?: string
   fullscreen: boolean
   canFullscreen: boolean
   mouthRef: MouthRef
@@ -56,8 +54,6 @@ export function VRMPlayer({
   totalSegments,
   currentTime,
   duration,
-  speakerName,
-  thumbnailUrl,
   fullscreen,
   canFullscreen,
   mouthRef,
@@ -88,8 +84,6 @@ export function VRMPlayer({
         totalSegments={totalSegments}
         currentTime={currentTime}
         duration={duration}
-        speakerName={speakerName}
-        thumbnailUrl={thumbnailUrl}
         fullscreen={fullscreen}
         canFullscreen={canFullscreen}
         onSwitchVrm={(modelId) => {

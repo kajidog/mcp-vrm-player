@@ -69,7 +69,7 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
           onClick={onBack}
           className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
         >
-          ← 戻る
+          戻る
         </button>
         <div className="text-sm font-semibold text-[var(--ui-text)]">ポーズ管理</div>
         <button
@@ -97,7 +97,7 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
         />
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_720px]">
         <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3">
           <div className="mb-2 text-xs font-semibold text-[var(--ui-text)]">
             {loading ? '読み込み中...' : `${poses.length} poses`}

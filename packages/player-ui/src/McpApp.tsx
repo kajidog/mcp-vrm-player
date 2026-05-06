@@ -107,7 +107,6 @@ export function McpApp() {
         app={player.app}
         busy={player.loadingModel}
         onBack={() => setView('player')}
-        onOpenModels={() => setView('player')}
         onOpenPoses={() => setView('poses')}
         onApplied={async () => {
           await player.resynthesizeAll()
@@ -149,12 +148,6 @@ export function McpApp() {
           totalSegments={player.segments.length}
           currentTime={player.currentTime}
           duration={player.duration}
-          speakerName={
-            player.currentSegmentIndex !== null
-              ? (player.segments[player.currentSegmentIndex]?.speakerName ?? null)
-              : (player.segments[0]?.speakerName ?? null)
-          }
-          thumbnailUrl={player.speakerIconUrl}
           fullscreen={fullscreen}
           canFullscreen={displayMode.canFullscreen}
           mouthRef={player.mouthRef}

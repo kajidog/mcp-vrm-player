@@ -43,7 +43,7 @@ export function ModelStrip({ app, activeModelId, busy, refreshKey, onSelect, onA
   }, [app, refreshKey])
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden">
       {items.slice(0, 8).map((item) => {
         const active = item.id === activeModelId
         return (
@@ -51,12 +51,12 @@ export function ModelStrip({ app, activeModelId, busy, refreshKey, onSelect, onA
             <button
               type="button"
               disabled={busy || active}
-              title={`${item.name} / 話者${item.speakerId}`}
+              title={`${item.name}`}
               onClick={() => onSelect(item.id)}
               className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 p-0 text-xs font-semibold ${
                 active
                   ? 'border-[var(--ui-accent)] bg-[var(--ui-button-bg)] text-[var(--ui-text)]'
-                  : 'border-transparent bg-[var(--ui-button-bg)] text-[var(--ui-text)] ring-1 ring-[var(--ui-border)] hover:border-[var(--ui-accent)]'
+                  : 'border-transparent bg-[var(--ui-button-bg)] text-[var(--ui-text)] ring-1 ring-[var(--ui-border)] hover:border-[var(--ui-accent)] cursor-pointer'
               } disabled:opacity-70`}
             >
               {item.thumbnailBase64 ? (
@@ -71,9 +71,9 @@ export function ModelStrip({ app, activeModelId, busy, refreshKey, onSelect, onA
             </button>
             <button
               type="button"
-              title="Edit"
+              title="編集"
               onClick={() => onEdit(item.id)}
-              className="absolute -right-1 -bottom-1 hidden h-5 w-5 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)] shadow group-hover:flex"
+              className="absolute cursor-pointer -right-1 -bottom-1 hidden h-5 w-5 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)] shadow group-hover:flex hover:bg-[var(--ui-button-bg)] hover:border-[var(--ui-accent)]"
             >
               <PencilIcon />
             </button>

@@ -697,7 +697,7 @@ export function VrmRegisterView({
           onClick={onBack}
           className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
         >
-          ← キャンセル
+          キャンセル
         </button>
         <div className="truncate text-sm font-semibold text-[var(--ui-text)]">
           {isEdit ? 'VRM を編集' : 'VRM を追加'}

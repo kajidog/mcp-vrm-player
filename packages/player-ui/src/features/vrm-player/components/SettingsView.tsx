@@ -10,12 +10,11 @@ interface SettingsViewProps {
   app: App
   busy: boolean
   onBack: () => void
-  onOpenModels: () => void
   onOpenPoses: () => void
   onApplied: () => Promise<void>
 }
 
-export function SettingsView({ app, busy, onBack, onOpenModels, onOpenPoses, onApplied }: SettingsViewProps) {
+export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: SettingsViewProps) {
   const [cliDefaults, setCliDefaults] = useState<PlayerSettings & { speedScale: number }>({ speedScale: 1 })
   const [values, setValues] = useState<PlayerSettings>({ speedScale: 1 })
   const [loading, setLoading] = useState(false)
@@ -74,7 +73,7 @@ export function SettingsView({ app, busy, onBack, onOpenModels, onOpenPoses, onA
           onClick={onBack}
           className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
         >
-          ← プレイヤーに戻る
+          戻る
         </button>
         <div className="text-sm font-semibold text-[var(--ui-text)]">設定</div>
 
@@ -116,20 +115,14 @@ export function SettingsView({ app, busy, onBack, onOpenModels, onOpenPoses, onA
           <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            onClick={onOpenModels}
-            className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
+            disabled={loading || busy}
+            onClick={() => void apply(true)}
+            className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)] disabled:opacity-50"
           >
-            モデル管理
-          </button>
-          <button
-            type="button"
-            onClick={onOpenPoses}
-            className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
-          >
-            ポーズ管理
+            リセット
           </button>
           <button
             type="button"
@@ -139,16 +132,15 @@ export function SettingsView({ app, busy, onBack, onOpenModels, onOpenPoses, onA
           >
             {loading ? '適用中...' : '適用'}
           </button>
-          <button
-            type="button"
-            disabled={loading || busy}
-            onClick={() => void apply(true)}
-            className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)] disabled:opacity-50"
-          >
-            リセット
-          </button>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onOpenPoses}
+        className="rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-3 py-1.5 text-xs text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
+      >
+        ポーズ管理
+      </button>
     </div>
   )
 }
