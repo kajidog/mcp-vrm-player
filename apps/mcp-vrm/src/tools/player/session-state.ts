@@ -22,6 +22,9 @@ export interface PlayerSegmentState {
   postPhonemeLength?: number
   pauseLengthScale?: number
   pose?: string
+  emotion?: string
+  expressionName?: string
+  expressionWeight?: number
 }
 
 export interface PlayerSessionState {

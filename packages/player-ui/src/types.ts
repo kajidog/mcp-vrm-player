@@ -46,6 +46,9 @@ export interface AudioSegment {
   prePhonemeLength?: number
   postPhonemeLength?: number
   pauseLengthScale?: number
+  emotion?: string
+  expressionName?: string
+  expressionWeight?: number
 }
 
 /** マルチスピーカー用データ */

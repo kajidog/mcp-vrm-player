@@ -61,6 +61,24 @@ describe('VrmRegistryStore', () => {
     expect(readFileSync(model.vrmFilePath)).toEqual(SAMPLE_VRM_BYTES)
   })
 
+  it('感情ごとの表情/話者設定を保存・更新できる', async () => {
+    const store = new VrmRegistryStore({ cacheDir: TMP })
+    const model = await store.register({
+      name: 'A',
+      speakerId: 1,
+      emotionBindings: [{ emotion: 'happy', expressionName: 'happy', speakerId: 7, weight: 0.8 }],
+      vrmBase64: SAMPLE_VRM_BASE64,
+    })
+
+    expect(model.emotionBindings).toEqual([{ emotion: 'happy', expressionName: 'happy', speakerId: 7, weight: 0.8 }])
+
+    const updated = store.update(model.id, {
+      emotionBindings: [{ emotion: 'sad', expressionName: 'sad', speakerId: 9 }],
+    })
+
+    expect(updated.emotionBindings).toEqual([{ emotion: 'sad', expressionName: 'sad', speakerId: 9 }])
+  })
+
   it('isDefault=true で登録するとそれが default になる', async () => {
     const store = createStore()
     const model = await store.register({

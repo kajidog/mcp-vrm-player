@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
+import { EMOTION_NAMES, type EmotionBinding, type EmotionName, normalizeEmotion } from '../emotions.js'
 import { isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled } from '../registration.js'
 import type { ToolDeps } from '../types.js'
@@ -10,6 +11,7 @@ import { playerResourceUri } from './runtime.js'
 import type { PlayerRuntime } from './runtime.js'
 
 interface SegmentInput {
+  emotion?: string
   pose?: string
   text: string
   speedScale?: number
@@ -21,6 +23,9 @@ interface ResolvedSegment {
   speedScale?: number
   explicitSpeedScale?: number
   pose?: string
+  emotion: EmotionName
+  expressionName?: string
+  expressionWeight?: number
 }
 
 export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime): void {
@@ -49,6 +54,10 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 .describe(
                   'Pose name from list_vrms vrms[].poses[].name, or legacy preset ID (idle, wave, bow). Defaults to idle.'
                 ),
+              emotion: z
+                .enum(EMOTION_NAMES)
+                .optional()
+                .describe('Emotion for this segment: neutral, happy, angry, sad, relaxed, surprised, or serious.'),
               speedScale: z.number().optional().describe('Playback speed for this segment.'),
             })
           )
@@ -78,22 +87,27 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     }): Promise<CallToolResult> => {
       try {
         const model = resolveVrmModel(runtime, modelId)
-        const speakerId = model?.speakerId ?? config.defaultSpeaker
         const baseSegments: ResolvedSegment[] = segments.map((s, index) => {
           if (!s.text?.trim()) {
             throw new Error(`segments[${index}].text is required`)
           }
           const explicitSpeedScale = s.speedScale ?? speedScale
+          const emotion = normalizeEmotion(s.emotion)
+          const binding = resolveEmotionBinding(model?.emotionBindings, emotion)
+          const speaker = binding?.speakerId ?? model?.speakerId ?? config.defaultSpeaker
           return {
             text: s.text,
-            speaker: speakerId,
+            speaker,
             speedScale: explicitSpeedScale,
             explicitSpeedScale,
             pose: s.pose,
+            emotion,
+            ...(binding?.expressionName ? { expressionName: binding.expressionName } : {}),
+            ...(binding?.weight !== undefined ? { expressionWeight: binding.weight } : {}),
           }
         })
 
-        const speakerNameMap = await runtime.resolveSpeakerNames([speakerId])
+        const speakerNameMap = await runtime.resolveSpeakerNames(baseSegments.map((segment) => segment.speaker))
         const viewUUID = randomUUID()
 
         // 各セグメントを並列合成し、結果は audio キャッシュに格納するだけ。
@@ -134,6 +148,9 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
               : {}),
             ...(synthesized[index].audioQuery !== undefined ? { audioQuery: synthesized[index].audioQuery } : {}),
             ...(s.pose !== undefined ? { pose: s.pose } : {}),
+            emotion: s.emotion,
+            ...(s.expressionName !== undefined ? { expressionName: s.expressionName } : {}),
+            ...(s.expressionWeight !== undefined ? { expressionWeight: s.expressionWeight } : {}),
           })),
           updatedAt: Date.now(),
         }
@@ -154,6 +171,9 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             ? { postPhonemeLength: synthesized[index].postPhonemeLength }
             : {}),
           ...(s.pose !== undefined ? { pose: s.pose } : {}),
+          emotion: s.emotion,
+          ...(s.expressionName !== undefined ? { expressionName: s.expressionName } : {}),
+          ...(s.expressionWeight !== undefined ? { expressionWeight: s.expressionWeight } : {}),
         }))
         const structured: Record<string, unknown> = {
           viewUUID,
@@ -171,6 +191,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                   name: model.name,
                   speakerId: model.speakerId,
                   vrmUrl: getVrmModelUrl(config, model.id),
+                  emotionBindings: model.emotionBindings ?? [],
                   poses: (model.poses ?? []).flatMap((attachment) => {
                     if (isBuiltinPoseResourceId(attachment.poseId)) {
                       return [{ id: attachment.poseId, name: attachment.name, loop: true }]
@@ -197,6 +218,13 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
       }
     }
   )
+}
+
+function resolveEmotionBinding(
+  bindings: EmotionBinding[] | undefined,
+  emotion: EmotionName
+): EmotionBinding | undefined {
+  return bindings?.find((binding) => binding.emotion === emotion)
 }
 
 function resolveVrmModel(runtime: PlayerRuntime, modelId: string | undefined) {

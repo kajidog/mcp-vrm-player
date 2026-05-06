@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
+import { EMOTION_NAMES, type EmotionBinding, isEmotionName } from '../emotions.js'
 import type { PlayerUIToolContext } from '../player-ui/context.js'
 import type { PoseRegistryStore } from '../pose-registry/store.js'
 import type { ModelPoseAttachment } from '../pose-registry/types.js'
@@ -26,6 +27,29 @@ function validateAttachments(poseRegistry: PoseRegistryStore, poses: ModelPoseAt
     if (!pose.name.trim()) throw new Error('poses[].name is required')
     if (isBuiltinPoseResourceId(pose.poseId)) continue
     if (!poseRegistry.get(pose.poseId)) throw new Error(`Pose not found: ${pose.poseId}`)
+  }
+}
+
+const emotionBindingSchema = z.object({
+  emotion: z.enum(EMOTION_NAMES),
+  expressionName: z.string().optional(),
+  speakerId: z.number().optional(),
+  weight: z.number().min(0).max(1).optional(),
+})
+
+function validateEmotionBindings(bindings: EmotionBinding[] | undefined): void {
+  if (bindings === undefined) return
+  const seen = new Set<string>()
+  for (const binding of bindings) {
+    if (!isEmotionName(binding.emotion)) throw new Error(`Unknown emotion: ${binding.emotion}`)
+    if (seen.has(binding.emotion)) throw new Error(`Duplicate emotion binding: ${binding.emotion}`)
+    seen.add(binding.emotion)
+    if (binding.expressionName !== undefined && !binding.expressionName.trim()) {
+      throw new Error('emotionBindings[].expressionName must not be empty')
+    }
+    if (binding.weight !== undefined && (binding.weight < 0 || binding.weight > 1)) {
+      throw new Error('emotionBindings[].weight must be between 0 and 1')
+    }
   }
 }
 
@@ -123,6 +147,7 @@ export function registerVrmRegistryTools(
         isDefault: z.boolean().optional().describe('Set as the global default VRM'),
         isPublic: z.boolean().optional().describe('Mark as public (reserved for future use)'),
         poses: z.array(z.object({ poseId: z.string(), name: z.string() })).optional(),
+        emotionBindings: z.array(emotionBindingSchema).optional(),
         vrmBase64: z.string().min(1).describe('VRM/GLB file content encoded as base64'),
       },
       _meta: {
@@ -135,10 +160,12 @@ export function registerVrmRegistryTools(
       isDefault?: boolean
       isPublic?: boolean
       poses?: ModelPoseAttachment[]
+      emotionBindings?: EmotionBinding[]
       vrmBase64: string
     }): Promise<CallToolResult> => {
       try {
         validateAttachments(poseRegistry, input.poses)
+        validateEmotionBindings(input.emotionBindings)
         const model = await registry.register(input)
         return { content: [{ type: 'text', text: JSON.stringify({ vrm: toMetadataPayload(model) }) }] }
       } catch (error) {
@@ -161,6 +188,7 @@ export function registerVrmRegistryTools(
         isDefault: z.boolean().optional(),
         isPublic: z.boolean().optional(),
         poses: z.array(z.object({ poseId: z.string(), name: z.string() })).optional(),
+        emotionBindings: z.array(emotionBindingSchema).optional(),
       },
       _meta: {
         ui: { resourceUri: playerResourceUri, visibility: ['app'] },
@@ -173,10 +201,12 @@ export function registerVrmRegistryTools(
       isDefault?: boolean
       isPublic?: boolean
       poses?: ModelPoseAttachment[]
+      emotionBindings?: EmotionBinding[]
     }): Promise<CallToolResult> => {
       try {
         const { modelId, ...fields } = input
         validateAttachments(poseRegistry, fields.poses)
+        validateEmotionBindings(fields.emotionBindings)
         const model = registry.update(modelId, fields)
         return { content: [{ type: 'text', text: JSON.stringify({ vrm: toMetadataPayload(model) }) }] }
       } catch (error) {

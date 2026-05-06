@@ -126,6 +126,7 @@ export function McpApp() {
           source={player.source}
           loadingModel={player.loadingModel}
           pose={player.pose}
+          expression={player.expression}
           speechText={player.currentSegmentText}
           activeModelId={player.activeModel?.id ?? null}
           listRefreshKey={listRefreshKey}

@@ -1,3 +1,4 @@
+import type { EmotionBinding } from '../emotions.js'
 import type { ModelPoseAttachment } from '../pose-registry/types.js'
 
 export interface VrmModel {
@@ -7,6 +8,7 @@ export interface VrmModel {
   isDefault: boolean
   isPublic: boolean
   poses?: ModelPoseAttachment[]
+  emotionBindings?: EmotionBinding[]
   vrmFilePath: string
   vrmSizeBytes: number
   thumbnailBase64?: string

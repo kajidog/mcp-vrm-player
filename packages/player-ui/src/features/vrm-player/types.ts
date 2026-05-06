@@ -1,3 +1,4 @@
+import type { EmotionBinding } from '../emotions'
 import type { ModelPoseAttachment, PoseSource } from '../poses/types'
 import type { MouthRef } from './hooks/useLipSync'
 import type { PoseSegment } from './utils/vrmPayload'
@@ -53,6 +54,7 @@ export interface VrmPlayerState {
   app: import('@modelcontextprotocol/ext-apps').App | null
   // 直近の speak_player 呼び出しで指示された現在のポーズID（idle 等）。未指定時は undefined。
   pose: PoseSource | null
+  expression: { name: string; weight: number } | null
   // 直近の speak_player 結果から取り出した全セグメント。再生されていなければ空配列。
   segments: PoseSegment[]
   // 現在再生中のセグメントの index（再生していないときは null）。
@@ -69,6 +71,7 @@ export interface VrmPlayerState {
     speakerId: number
     thumbnailUrl?: string
     poses?: ModelPoseAttachment[]
+    emotionBindings?: EmotionBinding[]
   } | null
   // 表示モデルを別の登録モデルへ切替し、必要なら現セグメントを新 speaker で再合成する。
   switchVrm: (modelId: string) => Promise<void>

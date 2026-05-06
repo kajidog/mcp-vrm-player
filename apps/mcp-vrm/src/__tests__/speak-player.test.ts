@@ -129,6 +129,7 @@ describe('speak_player Phase 5', () => {
         name: string
         speakerId: number
         vrmUrl: string
+        emotionBindings: unknown[]
         poses: Array<{ id: string; name: string; loop: boolean }>
       }
       segments: Array<{ text: string; speaker: number; pose?: string; speedScale: number }>
@@ -138,6 +139,7 @@ describe('speak_player Phase 5', () => {
       name: 'Alice',
       speakerId: 7,
       vrmUrl: `http://localhost:8765/vrms/${model.id}.vrm`,
+      emotionBindings: [],
       poses: [
         { id: 'builtin:idle', name: 'idle', loop: true },
         { id: 'builtin:neutral', name: 'neutral', loop: true },
@@ -239,6 +241,45 @@ describe('speak_player Phase 5', () => {
     expect(result.isError).toBeUndefined()
     const structured = result.structuredContent as { segments: Array<{ speaker: number }> }
     expect(structured.segments.map((s) => s.speaker)).toEqual([42, 42, 42])
+  })
+
+  it('emotion binding の speaker と expression をセグメントへ反映する', async () => {
+    const model = await registry.register({
+      name: 'A',
+      speakerId: 1,
+      emotionBindings: [
+        { emotion: 'happy', speakerId: 8, expressionName: 'happy', weight: 0.7 },
+        { emotion: 'sad', speakerId: 9, expressionName: 'sad' },
+      ],
+      vrmBase64: SAMPLE_VRM_BASE64,
+    })
+    const harness = buildHarness(registry)
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ emotion: 'happy', text: 'yay' }, { emotion: 'sad', text: 'oh' }, { text: 'plain' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      vrmModel?: { emotionBindings?: unknown[] }
+      segments: Array<{
+        emotion: string
+        speaker: number
+        expressionName?: string
+        expressionWeight?: number
+      }>
+    }
+    expect(structured.vrmModel?.emotionBindings).toHaveLength(2)
+    expect(structured.segments[0]).toMatchObject({
+      emotion: 'happy',
+      speaker: 8,
+      expressionName: 'happy',
+      expressionWeight: 0.7,
+    })
+    expect(structured.segments[1]).toMatchObject({ emotion: 'sad', speaker: 9, expressionName: 'sad' })
+    expect(structured.segments[2]).toMatchObject({ emotion: 'neutral', speaker: 1 })
+    expect(structured.segments[2].expressionName).toBeUndefined()
   })
 
   it('pose 未指定セグメントは pose プロパティを保存しない（UI 側で idle 扱い）', async () => {

@@ -101,6 +101,9 @@ export function extractModelIdFromInput(params: McpUiToolInputNotification['para
 
 export interface PoseSegment {
   pose?: string
+  emotion?: string
+  expressionName?: string
+  expressionWeight?: number
   text: string
   speedScale?: number
   explicitSpeedScale?: number
@@ -125,6 +128,9 @@ function pickPoseSegments(source: unknown): PoseSegment[] | null {
     result.push({
       text,
       pose: readString(segment, 'pose'),
+      emotion: readString(segment, 'emotion'),
+      expressionName: readString(segment, 'expressionName'),
+      expressionWeight: typeof segment.expressionWeight === 'number' ? segment.expressionWeight : undefined,
       speedScale: typeof segment.speedScale === 'number' ? segment.speedScale : undefined,
       explicitSpeedScale: typeof segment.explicitSpeedScale === 'number' ? segment.explicitSpeedScale : undefined,
       prePhonemeLength: typeof segment.prePhonemeLength === 'number' ? segment.prePhonemeLength : undefined,

@@ -2,6 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps'
 import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { type EmotionBinding, resolveEmotionBinding } from '~/features/emotions'
 import { usePoseRegistry } from '~/features/poses/hooks/usePoseRegistry'
 import { resolveSegmentPose } from '~/features/poses/resolve'
 import type { ModelPoseAttachment, PoseSource } from '~/features/poses/types'
@@ -104,6 +105,24 @@ function readModelPoses(value: unknown): ModelPoseAttachment[] | undefined {
   return poses.length > 0 ? poses : undefined
 }
 
+function readEmotionBindings(value: unknown): EmotionBinding[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const bindings = value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const record = entry as Record<string, unknown>
+    if (typeof record.emotion !== 'string') return []
+    return [
+      {
+        emotion: record.emotion as EmotionBinding['emotion'],
+        expressionName: typeof record.expressionName === 'string' ? record.expressionName : undefined,
+        speakerId: typeof record.speakerId === 'number' ? record.speakerId : undefined,
+        weight: typeof record.weight === 'number' ? record.weight : undefined,
+      },
+    ]
+  })
+  return bindings.length > 0 ? bindings : undefined
+}
+
 function consumeAutoPlay(meta: Record<string, unknown>): boolean {
   const wantedAutoPlay = meta.autoPlay !== false
   const viewUUID = typeof meta.viewUUID === 'string' && meta.viewUUID.trim() ? meta.viewUUID : undefined
@@ -164,6 +183,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [loadingPhase, setLoadingPhase] = useState<VrmPlayerState['loadingPhase']>('idle')
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [pose, setPose] = useState<PoseSource | null>(null)
+  const [expression, setExpression] = useState<VrmPlayerState['expression']>(null)
   const [segments, setSegments] = useState<PoseSegment[]>([])
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
   const [activeModel, setActiveModel] = useState<VrmPlayerState['activeModel']>(null)
@@ -208,6 +228,19 @@ export function useVrmPlayerApp(): VrmPlayerState {
 
   const resolveCurrentPose = useCallback((poseName: string | undefined): PoseSource | null => {
     return resolveSegmentPose(poseName, activeModelRef.current?.poses, poseLibraryRef.current)
+  }, [])
+
+  const resolveCurrentExpression = useCallback((segment: PoseSegment | null): VrmPlayerState['expression'] => {
+    if (!segment) return null
+    const expressionName =
+      segment.expressionName ??
+      resolveEmotionBinding(activeModelRef.current?.emotionBindings, segment.emotion)?.expressionName
+    if (!expressionName) return null
+    const weight =
+      segment.expressionWeight ??
+      resolveEmotionBinding(activeModelRef.current?.emotionBindings, segment.emotion)?.weight ??
+      1
+    return { name: expressionName, weight: Math.min(1, Math.max(0, weight)) }
   }, [])
 
   const setLoadingState = useCallback((phase: VrmPlayerState['loadingPhase'], progress: number) => {
@@ -300,6 +333,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     lipSync.setSegment(null)
     setCurrentTime(0)
     setDuration(0)
+    setExpression(null)
   }
 
   const schedulePoseTimer = (index: number, version: number, duration: number) => {
@@ -328,6 +362,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
       playbackIndexRef.current = list.length
       setCurrentSegmentIndex(null)
       setPose(resolveCurrentPose('idle'))
+      setExpression(null)
       return
     }
 
@@ -336,6 +371,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     setCurrentTime(0)
     setDuration(0)
     setPose(resolveCurrentPose(current.pose ?? 'idle'))
+    setExpression(resolveCurrentExpression(current))
 
     const audio = audioRef.current
     releaseAudioUrl()
@@ -375,12 +411,14 @@ export function useVrmPlayerApp(): VrmPlayerState {
       playbackIndexRef.current = 0
       setCurrentSegmentIndex(null)
       setPose(null)
+      setExpression(null)
       return
     }
     if (options.autoPlay === false) {
       playbackIndexRef.current = 0
       setCurrentSegmentIndex(null)
       setPose(resolveCurrentPose('idle'))
+      setExpression(null)
       return
     }
     playSegmentAt(0, playbackVersionRef.current)
@@ -554,6 +592,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
           name: meta.name,
           speakerId: meta.speakerId,
           poses: meta.poses,
+          emotionBindings: meta.emotionBindings,
           thumbnailUrl:
             meta.thumbnailBase64 !== undefined
               ? `data:${meta.thumbnailMimeType ?? 'image/png'};base64,${meta.thumbnailBase64}`
@@ -584,6 +623,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         name: metadata.name,
         speakerId: metadata.speakerId,
         poses: metadata.poses,
+        emotionBindings: metadata.emotionBindings,
         thumbnailUrl:
           metadata.thumbnailBase64 !== undefined
             ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
@@ -709,6 +749,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
                 name: vm.name,
                 speakerId: vm.speakerId,
                 poses: readModelPoses(vm.poses),
+                emotionBindings: readEmotionBindings(vm.emotionBindings),
                 thumbnailUrl: readDataUrl(vm),
               })
             }
@@ -768,7 +809,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
     poseLibraryRef.current = poseLibrary
     const currentSegment = currentSegmentIndex !== null ? segmentsRef.current[currentSegmentIndex] : null
     setPose(resolveCurrentPose(currentSegment?.pose ?? 'idle'))
-  }, [poseLibrary, currentSegmentIndex, resolveCurrentPose])
+    setExpression(resolveCurrentExpression(currentSegment))
+  }, [poseLibrary, currentSegmentIndex, resolveCurrentPose, resolveCurrentExpression])
 
   // App ハンドルが確立した直後は「ツール入力待ち」へ遷移させる。
   // 加えて、まだツール入出力が無いうちにデフォルト VRM をプリロードして
@@ -794,11 +836,13 @@ export function useVrmPlayerApp(): VrmPlayerState {
 
   const resynthesizeSegments = async (
     currentApp: App,
-    speakerId: number,
+    model: NonNullable<VrmPlayerState['activeModel']>,
     list: PoseSegment[]
   ): Promise<PoseSegment[]> => {
     return Promise.all(
       list.map(async (segment) => {
+        const binding = resolveEmotionBinding(model.emotionBindings, segment.emotion)
+        const speakerId = binding?.speakerId ?? model.speakerId
         try {
           const result = await resynthesizeSegmentOnServer(currentApp, {
             speakerId,
@@ -831,7 +875,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     setLoadingModel(true)
     setLoadingState('preparingAudio', 65)
     try {
-      startPlayback(await resynthesizeSegments(currentApp, model.speakerId, existing))
+      startPlayback(await resynthesizeSegments(currentApp, model, existing))
       setLoadingState('ready', 100)
     } finally {
       setLoadingModel(false)
@@ -871,6 +915,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         name: metadata.name,
         speakerId: metadata.speakerId,
         poses: metadata.poses,
+        emotionBindings: metadata.emotionBindings,
         thumbnailUrl:
           metadata.thumbnailBase64 !== undefined
             ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
@@ -883,7 +928,23 @@ export function useVrmPlayerApp(): VrmPlayerState {
       const existing = segmentsRef.current
       if (existing.length > 0) {
         setLoadingState('preparingAudio', 65)
-        startPlayback(await resynthesizeSegments(currentApp, metadata.speakerId, existing))
+        startPlayback(
+          await resynthesizeSegments(
+            currentApp,
+            {
+              id: metadata.id,
+              name: metadata.name,
+              speakerId: metadata.speakerId,
+              poses: metadata.poses,
+              emotionBindings: metadata.emotionBindings,
+              thumbnailUrl:
+                metadata.thumbnailBase64 !== undefined
+                  ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
+                  : undefined,
+            },
+            existing
+          )
+        )
       }
       setLoadingState('ready', 100)
     } catch (e) {
@@ -903,6 +964,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     loadingPhase,
     loadingProgress,
     pose,
+    expression,
     segments,
     currentSegmentIndex,
     currentTime,

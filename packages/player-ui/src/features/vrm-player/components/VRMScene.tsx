@@ -20,12 +20,14 @@ interface VRMSceneProps {
   source: VrmSource
   onError: (message: string) => void
   pose?: PoseSource | null
+  expression?: { name: string; weight: number } | null
   // 再生中音声に対するリップシンク値。useLipSync が in-place で更新する。
   mouthRef?: MouthRef
   // VRM ロード完了後、Canvas へ「キャラ上半身付近の y」を通知する。
   onCenterReady?: (y: number) => void
   // VRM ロード完了後、Canvas へ「頭ボーンのワールド座標」を通知する。
   onHeadReady?: (position: [number, number, number]) => void
+  onExpressionsReady?: (names: string[]) => void
   onLoadStart?: () => void
   onLoaded?: () => void
 }
@@ -38,9 +40,11 @@ export function VRMScene({
   source,
   onError,
   pose,
+  expression,
   mouthRef,
   onCenterReady,
   onHeadReady,
+  onExpressionsReady,
   onLoadStart,
   onLoaded,
 }: VRMSceneProps) {
@@ -51,6 +55,7 @@ export function VRMScene({
   const elapsedRef = useRef(0)
   // pose は ref に写してから useFrame で参照する（レンダ越しに最新値を拾うため）。
   const poseRef = useRef<PoseSource>(pose ?? DEFAULT_POSE_SOURCE)
+  const expressionRef = useRef<{ name: string; weight: number } | null>(expression ?? null)
   const vrmaCacheRef = useRef<Map<string, Promise<VRMAnimation>>>(new Map())
   const mixerRef = useRef<AnimationMixer | null>(null)
   const actionRef = useRef<AnimationAction | null>(null)
@@ -60,6 +65,10 @@ export function VRMScene({
   useEffect(() => {
     poseRef.current = pose ?? DEFAULT_POSE_SOURCE
   }, [pose])
+
+  useEffect(() => {
+    expressionRef.current = expression ?? null
+  }, [expression])
 
   // onError / onCenterReady を ref 経由で参照し、コールバック差し替えで useEffect が再実行されないようにする。
   const onErrorRef = useRef(onError)
@@ -76,6 +85,11 @@ export function VRMScene({
   useEffect(() => {
     onHeadReadyRef.current = onHeadReady
   }, [onHeadReady])
+
+  const onExpressionsReadyRef = useRef(onExpressionsReady)
+  useEffect(() => {
+    onExpressionsReadyRef.current = onExpressionsReady
+  }, [onExpressionsReady])
 
   const onLoadStartRef = useRef(onLoadStart)
   useEffect(() => {
@@ -121,6 +135,7 @@ export function VRMScene({
       loaded.springBoneManager?.reset()
       loaded.update(0)
       current = loaded
+      onExpressionsReadyRef.current?.(Object.keys(loaded.expressionManager?.expressionMap ?? {}).sort())
       mixerRef.current = new AnimationMixer(loaded.scene)
       actionRef.current = null
       activeVrmaKeyRef.current = null
@@ -287,6 +302,15 @@ export function VRMScene({
       mixerRef.current?.update(delta)
     }
     const em = vrm.expressionManager
+    const expression = expressionRef.current
+    if (em) {
+      for (const name of Object.keys(em.expressionMap)) {
+        if (!em.mouthExpressionNames.includes(name)) em.setValue(name, 0)
+      }
+      if (expression && em.getExpression(expression.name)) {
+        em.setValue(expression.name, expression.weight)
+      }
+    }
     const mouth = mouthRef?.current
     if (em && mouth) {
       em.setValue('aa', mouth.aa)

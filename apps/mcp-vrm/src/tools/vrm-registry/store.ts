@@ -21,6 +21,7 @@ export interface RegisterVrmInput {
   isDefault?: boolean
   isPublic?: boolean
   poses?: VrmModel['poses']
+  emotionBindings?: VrmModel['emotionBindings']
   vrmBase64: string
 }
 
@@ -30,6 +31,7 @@ export interface UpdateVrmInput {
   isDefault?: boolean
   isPublic?: boolean
   poses?: VrmModel['poses']
+  emotionBindings?: VrmModel['emotionBindings']
 }
 
 /**
@@ -93,6 +95,7 @@ export class VrmRegistryStore {
       isDefault: input.isDefault === true,
       isPublic: input.isPublic === true,
       poses: input.poses ?? createDefaultBuiltinAttachments(),
+      ...(input.emotionBindings !== undefined ? { emotionBindings: input.emotionBindings } : {}),
       vrmFilePath,
       vrmSizeBytes: buffer.byteLength,
       ...(thumbnail
@@ -121,6 +124,7 @@ export class VrmRegistryStore {
       ...(fields.isDefault !== undefined ? { isDefault: fields.isDefault } : {}),
       ...(fields.isPublic !== undefined ? { isPublic: fields.isPublic } : {}),
       ...(fields.poses !== undefined ? { poses: fields.poses } : {}),
+      ...(fields.emotionBindings !== undefined ? { emotionBindings: fields.emotionBindings } : {}),
       updatedAt: Date.now(),
     }
 

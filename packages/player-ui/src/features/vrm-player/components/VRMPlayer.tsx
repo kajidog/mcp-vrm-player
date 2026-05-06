@@ -10,6 +10,7 @@ interface VRMPlayerProps {
   source: VrmSource | null
   loadingModel: boolean
   pose?: PoseSource | null
+  expression?: { name: string; weight: number } | null
   speechText: string | null
   activeModelId: string | null
   listRefreshKey: number
@@ -44,6 +45,7 @@ export function VRMPlayer({
   source,
   loadingModel,
   pose,
+  expression,
   speechText,
   activeModelId,
   listRefreshKey,
@@ -107,6 +109,7 @@ export function VRMPlayer({
           source={source}
           onError={onModelError}
           pose={pose}
+          expression={expression}
           speechText={speechText}
           currentIndex={currentIndex}
           totalSegments={totalSegments}

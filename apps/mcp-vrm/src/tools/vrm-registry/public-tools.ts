@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { getVrmModelUrl } from '../../vrm-http.js'
+import type { EmotionBinding } from '../emotions.js'
 import type { PoseRegistryStore } from '../pose-registry/store.js'
 import { isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerToolIfEnabled } from '../registration.js'
@@ -15,6 +16,7 @@ interface PublicVrmEntry {
   vrmUrl: string
   vrmSizeBytes: number
   updatedAt: number
+  emotionBindings?: EmotionBinding[]
   poses: { id: string; name: string; loop: boolean }[]
 }
 
@@ -32,7 +34,7 @@ export function registerVrmPublicTools(
     {
       title: 'List VRMs',
       description:
-        'List registered VRM models. Use this before calling speak_player to discover valid modelId values and model poses. Pass segments[].pose as one of poses[].name; duplicate names are randomly selected during playback. Returns metadata only (no binary).',
+        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model poses, and emotion bindings. Pass segments[].pose as one of poses[].name and segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious. Returns metadata only (no binary).',
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -51,6 +53,7 @@ export function registerVrmPublicTools(
           vrmUrl: getVrmModelUrl(config, model.id),
           vrmSizeBytes: model.vrmSizeBytes,
           updatedAt: model.updatedAt,
+          emotionBindings: model.emotionBindings,
           poses: (model.poses ?? []).flatMap((attachment) => {
             if (isBuiltinPoseResourceId(attachment.poseId)) {
               return [{ id: attachment.poseId, name: attachment.name, loop: true }]

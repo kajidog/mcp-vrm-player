@@ -2,6 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteIcon, PlayIcon } from '~/icons'
+import { EMOTION_NAMES, type EmotionBinding } from '../emotions'
 import { PoseRegisterModal } from '../poses/PoseRegisterModal'
 import { usePoseRegistry } from '../poses/hooks/usePoseRegistry'
 import { DEFAULT_POSE_ID, POSE_PRESETS } from '../poses/presets'
@@ -143,6 +144,7 @@ interface FormState {
   isDefault: boolean
   isPublic: boolean
   poses: FormAttachment[]
+  emotionBindings: EmotionBinding[]
 }
 
 let attachmentKeyCounter = 0
@@ -158,12 +160,18 @@ const INITIAL_FORM: FormState = {
     poseId: `builtin:${id}`,
     name: id,
   })),
+  emotionBindings: EMOTION_NAMES.map((emotion) => ({ emotion, weight: 1 })),
 }
 
 const stripAttachmentKeys = (poses: FormAttachment[]): ModelPoseAttachment[] => poses.map(({ _key, ...rest }) => rest)
 
 const withAttachmentKeys = (poses: ModelPoseAttachment[]): FormAttachment[] =>
   poses.map((pose) => ({ ...pose, _key: nextAttachmentKey() }))
+
+function normalizeEmotionBindings(bindings: EmotionBinding[] | undefined): EmotionBinding[] {
+  const byEmotion = new Map((bindings ?? []).map((binding) => [binding.emotion, binding]))
+  return EMOTION_NAMES.map((emotion) => ({ emotion, weight: 1, ...byEmotion.get(emotion) }))
+}
 
 /**
  * VRM 登録/編集画面。
@@ -191,6 +199,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
   const [poseFormOpen, setPoseFormOpen] = useState(false)
   // プレビュー時の確認用ポーズ。保存する値ではないので form 外に持つ。
   const [previewPoseId, setPreviewPoseId] = useState(`builtin:${DEFAULT_POSE_ID}`)
+  const [availableExpressionNames, setAvailableExpressionNames] = useState<string[]>([])
 
   // 選択中話者の uuid から portrait を引く（キャッシュは uuid 単位）。
   const selectedSpeaker = speakers.find((s) => s.id === form.speakerId) ?? null
@@ -216,6 +225,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
       isDefault: metadata.isDefault,
       isPublic: metadata.isPublic,
       poses: withAttachmentKeys(metadata.poses ?? stripAttachmentKeys(INITIAL_FORM.poses)),
+      emotionBindings: normalizeEmotionBindings(metadata.emotionBindings),
     })
     setVrmBuffer(null)
     setExistingVrmUrl(null)
@@ -303,6 +313,12 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
     setSaving(true)
     try {
       const persistedPoses = stripAttachmentKeys(form.poses)
+      const persistedEmotionBindings = form.emotionBindings.map((binding) => ({
+        emotion: binding.emotion,
+        ...(binding.expressionName?.trim() ? { expressionName: binding.expressionName.trim() } : {}),
+        ...(binding.speakerId !== undefined ? { speakerId: binding.speakerId } : {}),
+        ...(binding.weight !== undefined ? { weight: binding.weight } : {}),
+      }))
       if (isEdit && modelId) {
         await update(modelId, {
           name: form.name.trim(),
@@ -310,6 +326,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
           isDefault: form.isDefault,
           isPublic: form.isPublic,
           poses: persistedPoses,
+          emotionBindings: persistedEmotionBindings,
         })
         if (vrmBuffer) {
           await replaceBinary(modelId, {
@@ -323,6 +340,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
           isDefault: form.isDefault,
           isPublic: form.isPublic,
           poses: persistedPoses,
+          emotionBindings: persistedEmotionBindings,
           vrmBase64: arrayBufferToBase64(vrmBuffer),
         })
       }
@@ -354,6 +372,12 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
   const previewPose = poseLibrary.get(previewPoseId) ?? poseLibrary.get(`builtin:${DEFAULT_POSE_ID}`) ?? null
   const firstPoseId = availablePoses[0]?.id ?? `builtin:${DEFAULT_POSE_ID}`
   const poseSectionDisabled = !isEdit && !vrmBuffer
+  const expressionOptions = Array.from(
+    new Set([
+      ...availableExpressionNames,
+      ...form.emotionBindings.flatMap((binding) => (binding.expressionName ? [binding.expressionName] : [])),
+    ])
+  ).sort()
 
   // 新しく追加したポーズグループのポーズ名 input に focus を当てるため、
   // group の最初の attachment の `_key` を一意な「グループキー」として保持する。
@@ -442,6 +466,15 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
 
   const removeAttachmentAt = (index: number) => {
     setForm((prev) => ({ ...prev, poses: prev.poses.filter((_, poseIndex) => poseIndex !== index) }))
+  }
+
+  const updateEmotionBinding = (emotion: EmotionBinding['emotion'], fields: Partial<EmotionBinding>) => {
+    setForm((prev) => ({
+      ...prev,
+      emotionBindings: normalizeEmotionBindings(prev.emotionBindings).map((binding) =>
+        binding.emotion === emotion ? { ...binding, ...fields } : binding
+      ),
+    }))
   }
 
   return (
@@ -534,6 +567,7 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
               source={previewSource}
               onError={setPreviewError}
               pose={previewPose}
+              onExpressionsReady={setAvailableExpressionNames}
               speechText={null}
               heightClassName="h-[min(62vh,620px)] min-h-[420px]"
             />
@@ -737,6 +771,70 @@ export function VrmRegisterView({ app, modelId, onBack, onSaved }: VrmRegisterVi
           {speakersError ? (
             <div className="mt-1 text-[11px] text-red-600">話者一覧の取得に失敗: {speakersError}</div>
           ) : null}
+        </div>
+
+        <div className="space-y-2 text-xs md:col-span-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-[var(--ui-text)]">感情ごとの表情と話者</div>
+            <div className="text-[11px] text-[var(--ui-text-secondary)]">
+              表情候補: {availableExpressionNames.length > 0 ? `${availableExpressionNames.length} 件` : '未検出'}
+            </div>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-2">
+            {normalizeEmotionBindings(form.emotionBindings).map((binding) => (
+              <div
+                key={binding.emotion}
+                className="grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)_4.5rem] items-center gap-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] p-2"
+              >
+                <div className="font-semibold text-[var(--ui-text)]">{binding.emotion}</div>
+                <select
+                  value={binding.expressionName ?? ''}
+                  onChange={(event) =>
+                    updateEmotionBinding(binding.emotion, {
+                      expressionName: event.target.value || undefined,
+                    })
+                  }
+                  className="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1.5 text-xs text-[var(--ui-text)] focus:border-[var(--ui-accent)] focus:outline-none"
+                >
+                  <option value="">表情なし</option>
+                  {expressionOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={binding.speakerId ?? ''}
+                  onChange={(event) =>
+                    updateEmotionBinding(binding.emotion, {
+                      speakerId: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
+                  }
+                  className="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1.5 text-xs text-[var(--ui-text)] focus:border-[var(--ui-accent)] focus:outline-none"
+                >
+                  <option value="">既定話者</option>
+                  {speakers.map((s) => (
+                    <option key={`${binding.emotion}-${s.uuid}-${s.id}`} value={s.id}>
+                      {s.characterName}（{s.name}）
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={binding.weight ?? 1}
+                  onChange={(event) =>
+                    updateEmotionBinding(binding.emotion, {
+                      weight: Math.min(1, Math.max(0, Number(event.target.value))),
+                    })
+                  }
+                  className="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1.5 text-xs text-[var(--ui-text)] focus:border-[var(--ui-accent)] focus:outline-none"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--ui-text)] md:col-span-2">

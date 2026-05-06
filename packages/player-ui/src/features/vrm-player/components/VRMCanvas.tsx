@@ -16,6 +16,7 @@ interface VRMCanvasProps {
   source: VrmSource | null
   onError: (message: string) => void
   pose?: PoseSource | null
+  expression?: { name: string; weight: number } | null
   // 吹き出しに出すテキスト。null のときは吹き出しを描画しない。
   speechText: string | null
   currentIndex?: number | null
@@ -25,6 +26,7 @@ interface VRMCanvasProps {
   mouthRef?: MouthRef
   onPrev?: () => void
   onNext?: () => void
+  onExpressionsReady?: (names: string[]) => void
   onLoadStart?: () => void
   onLoaded?: () => void
   heightClassName?: string
@@ -183,6 +185,7 @@ export function VRMCanvas({
   source,
   onError,
   pose,
+  expression,
   speechText,
   currentIndex = null,
   totalSegments = 0,
@@ -191,6 +194,7 @@ export function VRMCanvas({
   mouthRef,
   onPrev = () => {},
   onNext = () => {},
+  onExpressionsReady,
   onLoadStart,
   onLoaded,
   heightClassName = 'h-[420px]',
@@ -244,9 +248,11 @@ export function VRMCanvas({
               source={source}
               onError={onError}
               pose={pose}
+              expression={expression}
               mouthRef={mouthRef}
               onCenterReady={setCenterY}
               onHeadReady={setHeadPosition}
+              onExpressionsReady={onExpressionsReady}
               onLoadStart={onLoadStart}
               onLoaded={onLoaded}
             />

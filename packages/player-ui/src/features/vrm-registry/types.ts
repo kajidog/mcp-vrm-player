@@ -1,3 +1,4 @@
+import type { EmotionBinding } from '../emotions'
 import type { ModelPoseAttachment } from '../poses/types'
 
 // VRM レジストリ UI が受け取るメタデータ。
@@ -14,6 +15,7 @@ export interface VrmMetadata {
   isDefault: boolean
   isPublic: boolean
   poses?: ModelPoseAttachment[]
+  emotionBindings?: EmotionBinding[]
   vrmSizeBytes: number
   thumbnailBase64?: string
   thumbnailMimeType?: string
@@ -27,6 +29,7 @@ export interface RegisterVrmRequest {
   isDefault?: boolean
   isPublic?: boolean
   poses?: ModelPoseAttachment[]
+  emotionBindings?: EmotionBinding[]
   vrmBase64: string
 }
 
@@ -36,6 +39,7 @@ export interface UpdateVrmRequest {
   isDefault?: boolean
   isPublic?: boolean
   poses?: ModelPoseAttachment[]
+  emotionBindings?: EmotionBinding[]
 }
 
 export interface ReplaceVrmBinaryRequest {

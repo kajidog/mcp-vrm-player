@@ -1,4 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
+import type { EmotionBinding } from '~/features/emotions'
 import type { ModelPoseAttachment } from '~/features/poses/types'
 import type { AudioQuery } from '~/types'
 import type { VrmPayload } from '../types'
@@ -160,6 +161,7 @@ export interface VrmListEntry {
   speakerId: number
   isDefault?: boolean
   poses?: ModelPoseAttachment[]
+  emotionBindings?: EmotionBinding[]
   thumbnailBase64?: string
   thumbnailMimeType?: string
 }
