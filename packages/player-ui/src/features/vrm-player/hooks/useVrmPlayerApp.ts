@@ -88,6 +88,14 @@ function readToolMeta(result: CallToolResult): Record<string, unknown> {
   }
 }
 
+function readModelManagerRequest(result: CallToolResult): { mode: 'register' | 'edit'; modelId: string | null } | null {
+  const meta = readToolMeta(result)
+  if (meta.action !== 'openModelManager') return null
+  const mode = meta.mode === 'edit' ? 'edit' : 'register'
+  const modelId = typeof meta.modelId === 'string' && meta.modelId.trim() ? meta.modelId : null
+  return { mode, modelId }
+}
+
 function readModelPoses(value: unknown): ModelPoseAttachment[] | undefined {
   if (!Array.isArray(value)) return undefined
   const poses = value.flatMap((entry) => {
@@ -188,6 +196,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
   const [activeModel, setActiveModel] = useState<VrmPlayerState['activeModel']>(null)
   const [speakerIconUrl, setSpeakerIconUrl] = useState<string | undefined>(undefined)
+  const [modelManagerRequest, setModelManagerRequest] = useState<VrmPlayerState['modelManagerRequest']>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -729,7 +738,20 @@ export function useVrmPlayerApp(): VrmPlayerState {
         }
 
         const payload = extractPayloadFromResult(result)
-        if (!payload && !isPlayerToolResult(result)) {
+        const managerRequest = readModelManagerRequest(result)
+        if (managerRequest) {
+          setModelManagerRequest((previous) => ({
+            mode: managerRequest.mode,
+            modelId: managerRequest.modelId,
+            nonce: (previous?.nonce ?? 0) + 1,
+          }))
+        }
+
+        if (!payload && !isPlayerToolResult(result) && !managerRequest) {
+          return
+        }
+        if (!payload && !isPlayerToolResult(result) && managerRequest) {
+          setLoadingState('ready', 100)
           return
         }
 
@@ -755,7 +777,9 @@ export function useVrmPlayerApp(): VrmPlayerState {
             }
           }
 
-          await applyPayload(payload, 'ready')
+          if (payload || isPlayerToolResult(result)) {
+            await applyPayload(payload, 'ready')
+          }
 
           // speak_player の新形式は segments[].pose を含むがレスポンスサイズの都合で
           // 音声バイナリは含めない。viewUUID で `_get_player_audio_for_player` を後追い
@@ -977,6 +1001,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     hasSegments: segments.length > 0,
     isReadyForDisplay: Boolean(app),
     app: app ?? null,
+    modelManagerRequest,
     switchVrm,
     play,
     pause,

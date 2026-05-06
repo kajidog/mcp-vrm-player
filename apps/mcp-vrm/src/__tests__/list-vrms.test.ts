@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ServerConfig } from '../config.js'
+import { PoseRegistryStore } from '../tools/pose-registry/store.js'
 import { registerVrmPublicTools } from '../tools/vrm-registry/public-tools.js'
 import { VrmRegistryStore } from '../tools/vrm-registry/store.js'
 
@@ -21,28 +22,42 @@ function buildHarness(registry: VrmRegistryStore) {
     ) => {
       registrations.push({ name, handler })
     },
+    registerAppTool: (
+      name: string,
+      _config: unknown,
+      handler: (args: Record<string, unknown>) => Promise<CallToolResult>
+    ) => {
+      registrations.push({ name, handler })
+    },
   } as unknown as Parameters<typeof registerVrmPublicTools>[0]['server']
 
   const config = {
     httpHost: 'localhost',
     httpPort: 8765,
+    autoPlay: true,
+    defaultSpeedScale: 1,
   } as unknown as ServerConfig
 
   registerVrmPublicTools(
     {
       server,
-      ttsClient: {} as never,
-      engine: {} as never,
+      ttsClient: {
+        checkHealth: async () => ({ connected: true, version: 'test', url: 'http://localhost:50021' }),
+      } as never,
+      engine: { id: 'voicevox', displayName: 'VOICEVOX' } as never,
       capabilities: {} as never,
       config,
       disabledTools: new Set(),
     },
-    registry
+    registry,
+    new PoseRegistryStore({ cacheDir: TMP })
   )
 
-  const registration = registrations.find((r) => r.name.endsWith('list_vrms'))
-  if (!registration) throw new Error('list_vrms was not registered')
-  return (args: Record<string, unknown> = {}) => registration.handler(args)
+  return (toolName = 'list_vrms', args: Record<string, unknown> = {}) => {
+    const registration = registrations.find((r) => r.name.endsWith(toolName))
+    if (!registration) throw new Error(`${toolName} was not registered`)
+    return registration.handler(args)
+  }
 }
 
 describe('list_vrms public tool', () => {
@@ -104,5 +119,37 @@ describe('list_vrms public tool', () => {
 
     expect(JSON.stringify(result)).not.toContain('vrmBase64')
     expect(JSON.stringify(result)).not.toContain('vrmFilePath')
+  })
+
+  it('start_here は最初に必要な状態と既定ポーズを返す', async () => {
+    const invoke = buildHarness(registry)
+    const result = await invoke('start_here')
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      engine: { connected: boolean }
+      modelsCount: number
+      defaultPoses: string[]
+      emotions: string[]
+      registrationGuide?: string
+    }
+    expect(structured.engine.connected).toBe(true)
+    expect(structured.modelsCount).toBe(0)
+    expect(structured.defaultPoses).toContain('idle')
+    expect(structured.emotions).toContain('happy')
+    expect(structured.registrationGuide).toMatch(/No VRM model is registered/)
+    expect(JSON.stringify(structured)).not.toContain('requiresMcpApps')
+  })
+
+  it('find_models はモデル名検索とポーズ名返却ができる', async () => {
+    const model = await registry.register({ name: 'Alice', speakerId: 7, vrmBase64: SAMPLE_VRM_BASE64 })
+    const invoke = buildHarness(registry)
+    const result = await invoke('find_models', { query: 'ali' })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as { models: Array<{ modelId: string; poses: string[] }> }
+    expect(structured.models).toHaveLength(1)
+    expect(structured.models[0].modelId).toBe(model.id)
+    expect(structured.models[0].poses).toContain('wave')
   })
 })

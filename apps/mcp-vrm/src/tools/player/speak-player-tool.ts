@@ -3,6 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
 import { EMOTION_NAMES, type EmotionBinding, type EmotionName, normalizeEmotion } from '../emotions.js'
+import { EMOTION_GUIDE, getRegistrationGuide } from '../guidance.js'
 import { isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled } from '../registration.js'
 import type { ToolDeps } from '../types.js'
@@ -14,14 +15,12 @@ interface SegmentInput {
   emotion?: string
   pose?: string
   text: string
-  speedScale?: number
 }
 
 interface ResolvedSegment {
   text: string
   speaker: number
   speedScale?: number
-  explicitSpeedScale?: number
   pose?: string
   emotion: EmotionName
   expressionName?: string
@@ -37,13 +36,9 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     'speak_player',
     {
       title: 'Speak Player',
-      description:
-        'Creates a TTS player session UI. Provide segments [{ text, pose?, speedScale? }] and an optional modelId (falls back to the registered default; call list_vrms to discover IDs and pose names). The speaker is taken from the VRM model. Returns viewUUID. For simple playback without UI, use tts_speak instead.',
+      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names. Emotions are fixed values: ${EMOTION_GUIDE}. Playback speed and auto-play are controlled by the player settings UI, not by this tool.`,
       inputSchema: {
-        modelId: z
-          .string()
-          .optional()
-          .describe('VRM model ID. Falls back to the registered default; otherwise uses the CLI default speaker.'),
+        modelId: z.string().optional().describe('VRM model ID. Falls back to the registered default model.'),
         segments: z
           .array(
             z.object({
@@ -52,21 +47,16 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 .string()
                 .optional()
                 .describe(
-                  'Pose name from list_vrms vrms[].poses[].name, or legacy preset ID (idle, wave, bow). Defaults to idle.'
+                  'Pose name from vrm_find_models models[].poses, or built-in pose name such as idle, wave, or bow. Defaults to idle.'
                 ),
               emotion: z
                 .enum(EMOTION_NAMES)
                 .optional()
-                .describe('Emotion for this segment: neutral, happy, angry, sad, relaxed, surprised, or serious.'),
-              speedScale: z.number().optional().describe('Playback speed for this segment.'),
+                .describe(`Emotion for this segment. Fixed values: ${EMOTION_GUIDE}.`),
             })
           )
           .min(1)
           .describe('One or more spoken segments. The speaker is determined by the VRM model.'),
-        speedScale: z
-          .number()
-          .optional()
-          .describe('Default playback speed applied to segments without their own speedScale.'),
       },
       annotations: {
         readOnlyHint: false,
@@ -79,27 +69,40 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     async ({
       modelId,
       segments,
-      speedScale,
     }: {
       modelId?: string
       segments: SegmentInput[]
-      speedScale?: number
     }): Promise<CallToolResult> => {
       try {
         const model = resolveVrmModel(runtime, modelId)
+        if (!model) {
+          const structured = {
+            action: 'openModelManager',
+            mode: 'register',
+            displayed: true,
+            registrationGuide: getRegistrationGuide(false),
+          }
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Model registration UI displayed. No modelId was specified and no default VRM model is registered.\n${structured.registrationGuide}`,
+              },
+            ],
+            structuredContent: structured,
+            _meta: structured,
+          }
+        }
         const baseSegments: ResolvedSegment[] = segments.map((s, index) => {
           if (!s.text?.trim()) {
             throw new Error(`segments[${index}].text is required`)
           }
-          const explicitSpeedScale = s.speedScale ?? speedScale
           const emotion = normalizeEmotion(s.emotion)
           const binding = resolveEmotionBinding(model?.emotionBindings, emotion)
           const speaker = binding?.speakerId ?? model?.speakerId ?? config.defaultSpeaker
           return {
             text: s.text,
             speaker,
-            speedScale: explicitSpeedScale,
-            explicitSpeedScale,
             pose: s.pose,
             emotion,
             ...(binding?.expressionName ? { expressionName: binding.expressionName } : {}),
@@ -163,7 +166,6 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
           speaker: s.speaker,
           speakerName: speakerNameMap.get(s.speaker),
           speedScale: synthesized[index].speedScale ?? s.speedScale ?? config.defaultSpeedScale,
-          ...(s.explicitSpeedScale !== undefined ? { explicitSpeedScale: s.explicitSpeedScale } : {}),
           ...(synthesized[index].prePhonemeLength !== undefined
             ? { prePhonemeLength: synthesized[index].prePhonemeLength }
             : {}),
@@ -177,7 +179,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
         }))
         const structured: Record<string, unknown> = {
           viewUUID,
-          autoPlay: config.autoPlay,
+          autoPlay: runtime.playerSettings.applyDefaults({}).autoPlay,
           segments: uiSegments,
           audioMimeType: 'audio/wav',
           engineId: engine.id,
@@ -211,7 +213,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             },
           ],
           structuredContent: structured,
-          _meta: { viewUUID, autoPlay: config.autoPlay },
+          _meta: { viewUUID, autoPlay: structured.autoPlay },
         }
       } catch (error) {
         return createErrorResponse(error)

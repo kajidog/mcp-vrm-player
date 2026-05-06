@@ -50,6 +50,7 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
         speedScale: z.number().nullable().optional(),
         prePhonemeLength: z.number().nullable().optional(),
         postPhonemeLength: z.number().nullable().optional(),
+        autoPlay: z.boolean().nullable().optional(),
         reset: z.boolean().optional(),
       },
       _meta: {
@@ -60,6 +61,7 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
       speedScale?: number | null
       prePhonemeLength?: number | null
       postPhonemeLength?: number | null
+      autoPlay?: boolean | null
       reset?: boolean
     }): Promise<CallToolResult> => {
       try {
@@ -69,6 +71,7 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
               speedScale: input.speedScale,
               prePhonemeLength: input.prePhonemeLength,
               postPhonemeLength: input.postPhonemeLength,
+              autoPlay: input.autoPlay,
             })
         return {
           content: [

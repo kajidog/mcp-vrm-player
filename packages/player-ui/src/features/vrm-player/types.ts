@@ -52,6 +52,7 @@ export interface VrmPlayerState {
   loadingProgress: number
   isReadyForDisplay: boolean
   app: import('@modelcontextprotocol/ext-apps').App | null
+  modelManagerRequest: { mode: 'register' | 'edit'; modelId: string | null; nonce: number } | null
   // 直近の speak_player 呼び出しで指示された現在のポーズID（idle 等）。未指定時は undefined。
   pose: PoseSource | null
   expression: { name: string; weight: number } | null

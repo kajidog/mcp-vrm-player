@@ -392,15 +392,15 @@ export function getConfig(argv?: string[], env?: NodeJS.ProcessEnv): ServerConfi
  */
 export function getHelpText(): string {
   return generateHelp(allConfigDefs, {
-    usage: 'npx @kajidog/vv-vrm-mcp [options]',
+    usage: 'npx @kajidog/vrm-mcp [options]',
     examples: [
-      'npx @kajidog/vv-vrm-mcp --engine voicevox --base-url http://192.168.1.50:50021 --speaker 3',
-      'TTS_ENGINE=sakuraai TTS_API_KEY=... npx @kajidog/vv-vrm-mcp',
-      'npx @kajidog/vv-vrm-mcp --http --port 8080',
-      'npx @kajidog/vv-vrm-mcp --disable-tools synthesize_file',
-      'npx @kajidog/vv-vrm-mcp --disable-groups player,dictionary',
-      'npx @kajidog/vv-vrm-mcp --config ./my-config.json',
-      'npx @kajidog/vv-vrm-mcp --init',
+      'npx @kajidog/vrm-mcp --engine voicevox --base-url http://192.168.1.50:50021 --speaker 3',
+      'TTS_ENGINE=sakuraai TTS_API_KEY=... npx @kajidog/vrm-mcp',
+      'npx @kajidog/vrm-mcp --http --port 8080',
+      'npx @kajidog/vrm-mcp --disable-tools synthesize_file',
+      'npx @kajidog/vrm-mcp --disable-groups player,dictionary',
+      'npx @kajidog/vrm-mcp --config ./my-config.json',
+      'npx @kajidog/vrm-mcp --init',
     ],
   })
 }

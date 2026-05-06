@@ -55,8 +55,9 @@ export function VrmPreviewPanel({
 
   return (
     <div
-      className={`flex flex-col gap-2 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3 ${fullscreen ? 'h-[calc(100vh-5rem)] min-h-[420px] flex-none' : ''
-        }`}
+      className={`flex flex-col gap-2 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3 ${
+        fullscreen ? 'h-[calc(100vh-5rem)] min-h-[420px] flex-none' : ''
+      }`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex min-w-[150px] flex-1 items-center gap-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1.5">

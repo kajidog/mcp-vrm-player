@@ -243,11 +243,12 @@ export interface PlayerSettings {
   speedScale?: number
   prePhonemeLength?: number
   postPhonemeLength?: number
+  autoPlay?: boolean
 }
 
 export interface PlayerSettingsResponse {
   overrides: PlayerSettings
-  cliDefaults: PlayerSettings & { speedScale: number }
+  cliDefaults: PlayerSettings & { speedScale: number; autoPlay: boolean }
 }
 
 export async function fetchPlayerSettingsOnServer(app: App): Promise<PlayerSettingsResponse> {

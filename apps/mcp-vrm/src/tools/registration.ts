@@ -5,7 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
  * Tool name prefix for public-facing tools.
  * Internal tools (starting with '_') are not prefixed.
  */
-export const TOOL_PREFIX = 'vv-vrm_'
+export const TOOL_PREFIX = 'vrm_'
 
 /**
  * Add the tool prefix to a name.

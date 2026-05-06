@@ -15,8 +15,11 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: SettingsViewProps) {
-  const [cliDefaults, setCliDefaults] = useState<PlayerSettings & { speedScale: number }>({ speedScale: 1 })
-  const [values, setValues] = useState<PlayerSettings>({ speedScale: 1 })
+  const [cliDefaults, setCliDefaults] = useState<PlayerSettings & { speedScale: number; autoPlay: boolean }>({
+    speedScale: 1,
+    autoPlay: true,
+  })
+  const [values, setValues] = useState<PlayerSettings>({ speedScale: 1, autoPlay: true })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,6 +35,7 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
           speedScale: settings.overrides.speedScale ?? settings.cliDefaults.speedScale,
           prePhonemeLength: settings.overrides.prePhonemeLength ?? settings.cliDefaults.prePhonemeLength ?? 0,
           postPhonemeLength: settings.overrides.postPhonemeLength ?? settings.cliDefaults.postPhonemeLength ?? 0,
+          autoPlay: settings.overrides.autoPlay ?? settings.cliDefaults.autoPlay,
         })
       })
       .catch((e) => {
@@ -56,6 +60,7 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
           speedScale: cliDefaults.speedScale,
           prePhonemeLength: cliDefaults.prePhonemeLength ?? 0,
           postPhonemeLength: cliDefaults.postPhonemeLength ?? 0,
+          autoPlay: cliDefaults.autoPlay,
         })
       }
     } catch (e) {
@@ -109,6 +114,12 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
             defaultValue={cliDefaults.postPhonemeLength}
             onChange={(postPhonemeLength) => setValues((prev) => ({ ...prev, postPhonemeLength }))}
           />
+          <SettingToggle
+            label="自動再生"
+            checked={values.autoPlay ?? cliDefaults.autoPlay}
+            defaultValue={cliDefaults.autoPlay}
+            onChange={(autoPlay) => setValues((prev) => ({ ...prev, autoPlay }))}
+          />
         </div>
 
         {error ? (
@@ -142,6 +153,33 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
         ポーズ管理
       </button>
     </div>
+  )
+}
+
+function SettingToggle({
+  label,
+  checked,
+  defaultValue,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  defaultValue: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-xs text-[var(--ui-text)]">
+      <div>
+        <div className="font-semibold">{label}</div>
+        <div className="text-[var(--ui-text-secondary)]">既定: {defaultValue ? 'ON' : 'OFF'}</div>
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-[var(--ui-accent)]"
+      />
+    </label>
   )
 }
 

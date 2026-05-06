@@ -73,7 +73,9 @@ function buildHarness(registry: VrmRegistryStore) {
     getSessionStateByKey: (key) => sessionStates.get(key),
     vrmRegistry: registry,
     poseRegistry: new PoseRegistryStore({ cacheDir: TMP }),
-    playerSettings: {} as PlayerRuntime['playerSettings'],
+    playerSettings: {
+      applyDefaults: (input: Record<string, unknown>) => ({ ...input, speedScale: 1, autoPlay: true }),
+    } as PlayerRuntime['playerSettings'],
   }
 
   registerSpeakPlayerTool(
@@ -179,7 +181,7 @@ describe('speak_player Phase 5', () => {
     expect(structured.segments[0].speaker).toBe(3)
   })
 
-  it('segments 指定でデフォルトも未登録なら CLI デフォルト話者だけ返り、音声バイナリは含まない', async () => {
+  it('segments 指定でデフォルトも未登録ならモデル登録 UI 表示を返す', async () => {
     const harness = buildHarness(registry)
 
     const result = await harness.invoke({
@@ -188,15 +190,13 @@ describe('speak_player Phase 5', () => {
 
     expect(result.isError).toBeUndefined()
     const structured = result.structuredContent as {
-      vrmModel?: unknown
-      resolvedModelId?: unknown
-      segments: Array<{ speaker: number; audioBase64?: string }>
+      action?: string
+      mode?: string
+      displayed?: boolean
+      registrationGuide?: string
     }
-    expect(structured.vrmModel).toBeUndefined()
-    expect(structured.resolvedModelId).toBeUndefined()
-    expect(structured.segments[0]).toMatchObject({ speaker: 1 })
-    // audio binary は viewUUID で別途 `_get_player_audio_for_player` から取る前提。
-    expect(structured.segments[0].audioBase64).toBeUndefined()
+    expect(structured).toMatchObject({ action: 'openModelManager', mode: 'register', displayed: true })
+    expect(structured.registrationGuide).toMatch(/No VRM model is registered/)
   })
 
   it('未登録の modelId はエラー', async () => {

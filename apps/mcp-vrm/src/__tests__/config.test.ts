@@ -531,7 +531,7 @@ describe('config module', () => {
     it('Examplesが含まれる', () => {
       const help = getHelpText()
       expect(help).toContain('Examples:')
-      expect(help).toContain('npx @kajidog/vv-vrm-mcp')
+      expect(help).toContain('npx @kajidog/vrm-mcp')
     })
   })
 

@@ -1,5 +1,5 @@
 {
-  "name": "@kajidog/voicevox-vrm-mcp",
+  "name": "@kajidog/vrm-mcp",
   "version": "0.1.0",
   "description": "",
   "main": "./dist/index.js",
@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "voicevox-vrm-mcp": "./dist/index.js"
+    "vrm-mcp": "./dist/index.js"
   },
   "type": "module",
   "scripts": {
@@ -40,12 +40,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kajidog/voicevox-vrm-mcp.git"
+    "url": "git+https://github.com/kajidog/vrm-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/kajidog/voicevox-vrm-mcp/issues"
+    "url": "https://github.com/kajidog/vrm-mcp/issues"
   },
-  "homepage": "https://github.com/kajidog/voicevox-vrm-mcp#readme",
+  "homepage": "https://github.com/kajidog/vrm-mcp#readme",
   "license": "ISC",
   "engines": {
     "node": ">=18.0.0"

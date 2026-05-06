@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PoseListView } from './features/poses/PoseListView'
 import { SettingsView } from './features/vrm-player/components/SettingsView'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
@@ -63,6 +63,13 @@ export function McpApp() {
   const player = useVrmPlayerApp()
   const displayMode = useDisplayMode(player.app)
   const fullscreen = displayMode.displayMode === 'fullscreen'
+
+  useEffect(() => {
+    const request = player.modelManagerRequest
+    if (!request) return
+    setEditingModelId(request.mode === 'edit' ? request.modelId : null)
+    setView(request.mode)
+  }, [player.modelManagerRequest])
 
   if (player.status === 'connecting') {
     return <LoadingView label="Connecting..." />

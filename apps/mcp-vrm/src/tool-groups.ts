@@ -6,7 +6,16 @@
  */
 export const TOOL_GROUPS: Record<string, string[]> = {
   /** All player UI tools */
-  player: ['speak_player', 'resynthesize_player', 'get_player_state', 'open_dictionary_ui', 'list_vrms'],
+  player: [
+    'start_here',
+    'speak_player',
+    'find_models',
+    'open_model_manager',
+    'resynthesize_player',
+    'get_player_state',
+    'open_dictionary_ui',
+    'list_vrms',
+  ],
   /** Dictionary read/write tools kept for backward-compatible --disable-groups handling */
   dictionary: [
     'get_accent_phrases',
@@ -22,6 +31,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
   /** MCP App tools (tools registered as UI apps, i.e. with registerAppTool) */
   apps: [
     'speak_player',
+    'open_model_manager',
     'resynthesize_player',
     'open_dictionary_ui',
     '_get_speakers_for_player',

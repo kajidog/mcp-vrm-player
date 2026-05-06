@@ -14,7 +14,7 @@ const config = getConfig()
  */
 export function createServer(): McpServer {
   const server = new McpServer({
-    name: 'voicevox-vrm-mcp',
+    name: 'vrm-mcp',
     version: '0.1.0',
   })
 

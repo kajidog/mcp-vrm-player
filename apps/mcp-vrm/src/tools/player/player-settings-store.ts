@@ -9,18 +9,21 @@ export interface PlayerSettingsOverrides {
   speedScale?: number
   prePhonemeLength?: number
   postPhonemeLength?: number
+  autoPlay?: boolean
 }
 
 export interface PlayerSettingsPatch {
   speedScale?: number | null
   prePhonemeLength?: number | null
   postPhonemeLength?: number | null
+  autoPlay?: boolean | null
 }
 
 export interface PlayerCliDefaults {
   speedScale: number
   prePhonemeLength?: number
   postPhonemeLength?: number
+  autoPlay: boolean
 }
 
 export class PlayerSettingsStore {
@@ -35,6 +38,7 @@ export class PlayerSettingsStore {
       speedScale: config.defaultSpeedScale,
       prePhonemeLength: config.defaultPrePhonemeLength,
       postPhonemeLength: config.defaultPostPhonemeLength,
+      autoPlay: config.autoPlay,
     }
 
     try {
@@ -68,13 +72,14 @@ export class PlayerSettingsStore {
 
   applyDefaults<T extends PlayerSettingsOverrides>(
     input: T
-  ): T & Required<Pick<PlayerSettingsOverrides, 'speedScale'>> {
+  ): T & Required<Pick<PlayerSettingsOverrides, 'speedScale' | 'autoPlay'>> {
     return {
       ...input,
       speedScale: input.speedScale ?? this.overrides.speedScale ?? this.cliDefaults.speedScale,
       prePhonemeLength: input.prePhonemeLength ?? this.overrides.prePhonemeLength ?? this.cliDefaults.prePhonemeLength,
       postPhonemeLength:
         input.postPhonemeLength ?? this.overrides.postPhonemeLength ?? this.cliDefaults.postPhonemeLength,
+      autoPlay: input.autoPlay ?? this.overrides.autoPlay ?? this.cliDefaults.autoPlay,
     }
   }
 
@@ -132,6 +137,14 @@ function applyPatch(current: PlayerSettingsOverrides, patch: PlayerSettingsPatch
       next[key] = value
     }
   }
+  if ('autoPlay' in patch) {
+    const value = patch.autoPlay
+    if (value === null || value === undefined) {
+      const { autoPlay: _autoPlay, ...rest } = next
+      return rest
+    }
+    next.autoPlay = value
+  }
   return next
 }
 
@@ -141,5 +154,6 @@ function normalizeOverrides(input: PlayerSettingsOverrides): PlayerSettingsOverr
     const value = input[key]
     if (typeof value === 'number' && Number.isFinite(value)) result[key] = value
   }
+  if (typeof input.autoPlay === 'boolean') result.autoPlay = input.autoPlay
   return result
 }

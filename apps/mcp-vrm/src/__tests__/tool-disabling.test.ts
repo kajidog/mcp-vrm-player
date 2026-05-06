@@ -89,7 +89,10 @@ describe('tool groups (--disable-groups)', () => {
     it('player グループを展開する', () => {
       const tools = expandGroups(['player'])
       expect(tools).toEqual(TOOL_GROUPS.player)
+      expect(tools).toContain('start_here')
       expect(tools).toContain('speak_player')
+      expect(tools).toContain('find_models')
+      expect(tools).toContain('open_model_manager')
       expect(tools).toContain('resynthesize_player')
       expect(tools).toContain('get_player_state')
       expect(tools).toContain('open_dictionary_ui')
@@ -117,6 +120,7 @@ describe('tool groups (--disable-groups)', () => {
       const tools = expandGroups(['apps'])
       expect(tools).toEqual(TOOL_GROUPS.apps)
       expect(tools).toContain('speak_player')
+      expect(tools).toContain('open_model_manager')
       expect(tools).toContain('resynthesize_player')
       expect(tools).toContain('open_dictionary_ui')
     })
