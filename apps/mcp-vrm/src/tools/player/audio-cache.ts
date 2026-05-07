@@ -32,7 +32,7 @@ export class AudioCacheStore {
   private writesSinceCleanup = 0
 
   constructor(config: ToolDeps['config']) {
-    this.dir = config.playerCacheDir || join(process.cwd(), '.voicevox-player-cache')
+    this.dir = config.playerCacheDir || join(process.cwd(), '.tts-player-cache')
 
     const enabledFlag = config.playerAudioCacheEnabled !== false
     const ttlDays = Number.isFinite(config.playerAudioCacheTtlDays)

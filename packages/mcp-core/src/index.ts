@@ -27,6 +27,17 @@ export { type SessionConfig, setSessionConfig, getSessionConfig, deleteSessionCo
 // HTTP
 export { type CreateHttpAppOptions, createHttpApp } from './http.js'
 
+// Auth
+export {
+  type AuthInfo,
+  type OAuthConfig,
+  type OAuthConfigDefaults,
+  bearerAuth,
+  createOAuthConfig,
+  createProtectedResourceMetadata,
+  verifyAccessToken,
+} from './auth/index.js'
+
 // Stdio
 export { connectStdio } from './stdio.js'
 

@@ -5,6 +5,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { type Context, Hono, type Next } from 'hono'
 import { cors } from 'hono/cors'
 
+import { type OAuthConfig, bearerAuth, createProtectedResourceMetadata } from './auth/index.js'
 import type { BaseServerConfig } from './config.js'
 import { deleteSessionConfig } from './session.js'
 
@@ -37,6 +38,10 @@ export interface CreateHttpAppOptions {
   onSessionClosed?: (sessionId: string) => void
   /** MCP 以外のHTTPルートを追加するための拡張フック */
   configureApp?: (app: Hono) => void
+  /** OAuth JWT Bearer 認証設定。有効時は API キー認証より優先される */
+  authConfig?: OAuthConfig | null
+  /** OAuth JWT Bearer 認証を適用する Hono パスパターン */
+  authProtectedRoutes?: string[]
 }
 
 /**
@@ -171,6 +176,8 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono {
     onSessionInitialized,
     onSessionClosed,
     configureApp,
+    authConfig,
+    authProtectedRoutes = [],
   } = options
 
   // セッションごとのtransportを管理
@@ -265,8 +272,6 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono {
   // アプリケーションのセットアップ
   const app: Hono = new Hono()
 
-  configureApp?.(app)
-
   // CORSを設定
   const allowHeaders = [
     'Content-Type',
@@ -291,7 +296,16 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono {
   // セキュリティミドルウェアを適用
   app.use('/mcp', validateOrigin(config))
   app.use('/mcp', validateHost(config))
-  app.use('/mcp', validateApiKey(config))
+  if (authConfig) {
+    app.get('/.well-known/oauth-protected-resource', (c) => c.json(createProtectedResourceMetadata(authConfig)))
+    for (const route of authProtectedRoutes) {
+      app.use(route, bearerAuth(authConfig))
+    }
+  } else {
+    app.use('/mcp', validateApiKey(config))
+  }
+
+  configureApp?.(app)
 
   // ルート定義
   app.all('/mcp', handleMCP)

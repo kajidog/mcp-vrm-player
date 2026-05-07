@@ -32,14 +32,14 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig): void
   app.options('/vrms/:fileName', (c) => {
     c.header('Access-Control-Allow-Origin', '*')
     c.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type')
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     return c.body(null, 204)
   })
 
   app.options('/poses/:fileName', (c) => {
     c.header('Access-Control-Allow-Origin', '*')
     c.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type')
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     return c.body(null, 204)
   })
 

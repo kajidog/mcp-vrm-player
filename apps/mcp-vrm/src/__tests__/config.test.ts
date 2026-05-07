@@ -128,6 +128,31 @@ describe('config module', () => {
       expect(result.apiKey).toBe('test-key')
     })
 
+    it('OAuth オプションを正しくパースする', () => {
+      const result = parseCliArgs([
+        '--oauth',
+        '--mcp-server-url',
+        'https://mcp.example.com',
+        '--oauth-auth-server-url',
+        'https://auth.example.com',
+        '--oauth-jwks-uri',
+        'https://auth.example.com/jwks.json',
+        '--oauth-issuer',
+        'https://auth.example.com',
+        '--oauth-scopes',
+        'mcp:tools,mcp:resources',
+        '--oauth-resource-name',
+        'Custom MCP',
+      ])
+      expect(result.oauthEnabled).toBe(true)
+      expect(result.mcpServerUrl).toBe('https://mcp.example.com')
+      expect(result.oauthAuthServerUrl).toBe('https://auth.example.com')
+      expect(result.oauthJwksUri).toBe('https://auth.example.com/jwks.json')
+      expect(result.oauthIssuer).toBe('https://auth.example.com')
+      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthResourceName).toBe('Custom MCP')
+    })
+
     it('--engine-api-key を正しくパースする', () => {
       const result = parseCliArgs(['--engine-api-key', 'test-engine-key'])
       expect(result.engineApiKey).toBe('test-engine-key')
@@ -256,6 +281,25 @@ describe('config module', () => {
       expect(result.apiKey).toBe('env-key')
     })
 
+    it('OAuth 環境変数を正しく読み込む', () => {
+      const result = parseEnvVars({
+        MCP_OAUTH_ENABLED: 'true',
+        MCP_SERVER_URL: 'https://mcp.example.com',
+        MCP_AUTH_SERVER_URL: 'https://auth.example.com',
+        MCP_JWKS_URI: 'https://auth.example.com/jwks.json',
+        MCP_ISSUER: 'https://auth.example.com',
+        MCP_OAUTH_SCOPES: 'mcp:tools, mcp:resources',
+        MCP_RESOURCE_NAME: 'Custom MCP',
+      })
+      expect(result.oauthEnabled).toBe(true)
+      expect(result.mcpServerUrl).toBe('https://mcp.example.com')
+      expect(result.oauthAuthServerUrl).toBe('https://auth.example.com')
+      expect(result.oauthJwksUri).toBe('https://auth.example.com/jwks.json')
+      expect(result.oauthIssuer).toBe('https://auth.example.com')
+      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthResourceName).toBe('Custom MCP')
+    })
+
     it('TTS_API_KEY を正しく読み込む', () => {
       const result = parseEnvVars({ TTS_API_KEY: 'engine-env-key' })
       expect(result.engineApiKey).toBe('engine-env-key')
@@ -307,6 +351,13 @@ describe('config module', () => {
       expect(result.httpPort).toBe(3000)
       expect(result.httpHost).toBe('0.0.0.0')
       expect(result.apiKey).toBeUndefined()
+      expect(result.oauthEnabled).toBe(false)
+      expect(result.mcpServerUrl).toBe('http://localhost:3000')
+      expect(result.oauthAuthServerUrl).toBe('http://localhost:3001')
+      expect(result.oauthJwksUri).toBeUndefined()
+      expect(result.oauthIssuer).toBeUndefined()
+      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthResourceName).toBeUndefined()
       expect(result.engineApiKey).toBeUndefined()
     })
 

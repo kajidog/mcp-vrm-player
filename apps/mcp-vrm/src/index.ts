@@ -4,8 +4,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isNodejs, launchServer, setSessionConfig } from '@kajidog/mcp-core'
+import { createOAuthConfig, isNodejs, launchServer, setSessionConfig } from '@kajidog/mcp-core'
 import { getConfig, getConfigTemplate, getHelpText } from './config.js'
+import { createVrmOAuthHttpOptions } from './oauth.js'
 import { createServer, server } from './server.js'
 import { registerVrmHttpRoutes } from './vrm-http.js'
 
@@ -26,7 +27,7 @@ function isCLI(): boolean {
   const isNpmStart = process.env?.npm_lifecycle_event === 'start'
   const argv1 = process.argv[1] || ''
   const isDirectExecution =
-    argv1.includes('mcp-tts') ||
+    argv1.includes('vrm-mcp') ||
     argv1.endsWith('dist/index.js') ||
     argv1.endsWith('src/index.ts') ||
     argv1.includes('index.js') ||
@@ -91,7 +92,7 @@ async function startMCPServer(): Promise<void> {
   // バージョンオプションの確認
   if (process.argv.includes('--version') || process.argv.includes('-v')) {
     const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'))
-    console.log(`@kajidog/mcp-tts v${pkg.version}`)
+    console.log(`@kajidog/vrm-mcp v${pkg.version}`)
     process.exit(0)
   }
 
@@ -134,6 +135,7 @@ async function startMCPServer(): Promise<void> {
   }
 
   // mcp-core のランチャーを使用してサーバーを起動
+  const authConfig = createOAuthConfig(config, { resourceName: 'VRM MCP Server' })
   await launchServer({
     server,
     config,
@@ -141,6 +143,7 @@ async function startMCPServer(): Promise<void> {
     serverFactory: createServer,
     httpOptions: {
       extraCorsHeaders: ['X-TTS-Speaker'],
+      ...createVrmOAuthHttpOptions(authConfig),
       configureApp: (app) => {
         registerVrmHttpRoutes(app, config)
       },

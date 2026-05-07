@@ -67,6 +67,65 @@ export const baseConfigDefs: ConfigDefs = {
     type: 'string',
     valueName: '<key>',
   },
+  oauthEnabled: {
+    cli: '--oauth',
+    env: 'MCP_OAUTH_ENABLED',
+    description: 'Enable OAuth JWT Bearer authentication',
+    group: 'OAuth Options',
+    type: 'boolean',
+    default: false,
+  },
+  mcpServerUrl: {
+    cli: '--mcp-server-url',
+    env: 'MCP_SERVER_URL',
+    description: 'Public MCP server URL used as the OAuth protected resource identifier',
+    group: 'OAuth Options',
+    type: 'string',
+    default: 'http://localhost:3000',
+    valueName: '<url>',
+  },
+  oauthAuthServerUrl: {
+    cli: '--oauth-auth-server-url',
+    env: 'MCP_AUTH_SERVER_URL',
+    description: 'OAuth authorization server URL',
+    group: 'OAuth Options',
+    type: 'string',
+    default: 'http://localhost:3001',
+    valueName: '<url>',
+  },
+  oauthJwksUri: {
+    cli: '--oauth-jwks-uri',
+    env: 'MCP_JWKS_URI',
+    description: 'JWKS URI for verifying OAuth JWT access tokens',
+    group: 'OAuth Options',
+    type: 'string',
+    valueName: '<url>',
+  },
+  oauthIssuer: {
+    cli: '--oauth-issuer',
+    env: 'MCP_ISSUER',
+    description: 'Expected OAuth JWT issuer',
+    group: 'OAuth Options',
+    type: 'string',
+    valueName: '<issuer>',
+  },
+  oauthScopes: {
+    cli: '--oauth-scopes',
+    env: 'MCP_OAUTH_SCOPES',
+    description: 'Comma-separated OAuth scopes advertised by this resource server',
+    group: 'OAuth Options',
+    type: 'string[]',
+    default: ['mcp:tools', 'mcp:resources'],
+    valueName: '<scopes>',
+  },
+  oauthResourceName: {
+    cli: '--oauth-resource-name',
+    env: 'MCP_RESOURCE_NAME',
+    description: 'OAuth resource name used in metadata and WWW-Authenticate realm',
+    group: 'OAuth Options',
+    type: 'string',
+    valueName: '<name>',
+  },
 }
 
 // 基本設定型定義（HTTP/サーバー関連のみ）
@@ -77,6 +136,13 @@ export interface BaseServerConfig {
   allowedHosts: string[]
   allowedOrigins: string[]
   apiKey?: string
+  oauthEnabled: boolean
+  mcpServerUrl: string
+  oauthAuthServerUrl: string
+  oauthJwksUri?: string
+  oauthIssuer?: string
+  oauthScopes: string[]
+  oauthResourceName?: string
 }
 
 // デフォルト設定

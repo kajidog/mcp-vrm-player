@@ -41,7 +41,7 @@ export class AudioFileManager {
    * @returns 一時ファイルのフルパス
    */
   public createTempFilePath(): string {
-    const uniqueFilename = `voicevox-${crypto.randomUUID()}.wav`
+    const uniqueFilename = `tts-${crypto.randomUUID()}.wav`
     if (isBrowser()) {
       return uniqueFilename
     }
