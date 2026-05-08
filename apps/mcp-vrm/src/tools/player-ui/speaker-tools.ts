@@ -9,31 +9,31 @@ export function registerPlayerSpeakerTools(context: PlayerUIToolContext): void {
   const { server, disabledTools } = deps
   const { playerEngine, playerResourceUri, getSpeakerList } = shared
 
-  if (!deps.capabilities.speakerInfo) return
-
-  registerAppToolIfEnabled(
-    server,
-    disabledTools,
-    '_get_speakers_for_player',
-    {
-      title: 'Get Speakers (Player)',
-      description: 'Get speaker list for the player UI. This tool is only callable from the app UI.',
-      _meta: {
-        ui: {
-          resourceUri: playerResourceUri,
-          visibility: ['app'],
+  if (deps.capabilities.speakerList) {
+    registerAppToolIfEnabled(
+      server,
+      disabledTools,
+      '_get_speakers_for_player',
+      {
+        title: 'Get Speakers (Player)',
+        description: 'Get speaker list for the player UI. This tool is only callable from the app UI.',
+        _meta: {
+          ui: {
+            resourceUri: playerResourceUri,
+            visibility: ['app'],
+          },
         },
       },
-    },
-    async (): Promise<CallToolResult> => {
-      try {
-        const list = await getSpeakerList()
-        return { content: [{ type: 'text', text: JSON.stringify(list) }] }
-      } catch (error) {
-        return createErrorResponse(error)
+      async (): Promise<CallToolResult> => {
+        try {
+          const list = await getSpeakerList()
+          return { content: [{ type: 'text', text: JSON.stringify(list) }] }
+        } catch (error) {
+          return createErrorResponse(error)
+        }
       }
-    }
-  )
+    )
+  }
 
   registerAppToolIfEnabled(
     server,
@@ -54,6 +54,10 @@ export function registerPlayerSpeakerTools(context: PlayerUIToolContext): void {
     },
     async ({ speakerUuid }: { speakerUuid: string }): Promise<CallToolResult> => {
       try {
+        if (!deps.capabilities.speakerInfo) {
+          return { content: [{ type: 'text', text: JSON.stringify({ portrait: null }) }] }
+        }
+
         const cached = speakerIconCache.get(speakerUuid)
         if (cached) {
           return { content: [{ type: 'text', text: JSON.stringify({ portrait: cached }) }] }

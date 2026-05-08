@@ -98,14 +98,14 @@ async function startMCPServer(): Promise<void> {
 
   // --init: 設定ファイルのテンプレートを生成
   if (process.argv.includes('--init')) {
-    const outputPath = join(process.cwd(), '.voicevoxrc.json')
+    const outputPath = join(process.cwd(), '.ttsrc.json')
     if (existsSync(outputPath)) {
-      console.error('.voicevoxrc.json already exists. Remove it first or edit it directly.')
+      console.error('.ttsrc.json already exists. Remove it first or edit it directly.')
       process.exit(1)
     }
     const template = getConfigTemplate()
     writeFileSync(outputPath, `${JSON.stringify(template, null, 2)}\n`)
-    console.log('Created .voicevoxrc.json with default settings.')
+    console.log('Created .ttsrc.json with default settings.')
     console.log('Edit the file to customize your configuration.')
     process.exit(0)
   }

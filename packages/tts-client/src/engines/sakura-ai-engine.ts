@@ -47,6 +47,24 @@ const sakuraSpeakers: Speaker[] = [
   createSingleStyleSpeaker('東北ずん子', 107),
 ]
 
+const sakuraDirectSpeechVoices = new Map<number, { model: string; voice: string }>([
+  [3, { model: 'zundamon', voice: 'normal' }],
+  [1, { model: 'zundamon', voice: 'amaama' }],
+  [5, { model: 'zundamon', voice: 'sexy' }],
+  [7, { model: 'zundamon', voice: 'tsuntsun' }],
+  [22, { model: 'zundamon', voice: 'sasayaki' }],
+  [38, { model: 'zundamon', voice: 'hisohiso' }],
+  [75, { model: 'zundamon', voice: 'herohero' }],
+  [76, { model: 'zundamon', voice: 'namidame' }],
+  [113, { model: 'ankomon', voice: 'normal' }],
+  [8, { model: 'kasukabetsumugi', voice: 'normal' }],
+  [14, { model: 'meimeihimari', voice: 'normal' }],
+  [2, { model: 'shikokumetan', voice: 'normal' }],
+  [109, { model: 'tohokuitako', voice: 'normal' }],
+  [108, { model: 'tohokukiritan', voice: 'normal' }],
+  [107, { model: 'tohokuzunko', voice: 'normal' }],
+])
+
 export interface SakuraAiEngineOptions {
   baseUrl?: string
   apiKey: string
@@ -88,7 +106,7 @@ export class SakuraAiEngine implements TtsEngine {
         'post',
         `/tts/v1/audio_query?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(speaker.toString())}`,
         null,
-        { 'Content-Type': 'application/json' }
+        { Accept: 'application/json' }
       )
     } catch (error) {
       throw handleError('Sakura AI Engine 音声クエリ生成中にエラーが発生しました', error)
@@ -114,13 +132,14 @@ export class SakuraAiEngine implements TtsEngine {
 
   public async synthesizeSpeech(input: DirectSpeechInput): Promise<ArrayBuffer> {
     try {
+      const voice = resolveDirectSpeechVoice(input.speaker)
       return await this.http.request<ArrayBuffer>(
         'post',
         '/v1/audio/speech',
         {
-          model: 'zundamon',
+          model: voice.model,
           input: input.text,
-          voice: 'normal',
+          voice: voice.voice,
           response_format: input.responseFormat ?? 'wav',
         },
         {
@@ -171,6 +190,10 @@ function createSingleStyleSpeaker(name: string, id: number): Speaker {
     supported_features: { permitted_synthesis_morphing: 'NOTHING' },
     styles: [{ name: 'ノーマル', id, type: 'talk' }],
   }
+}
+
+function resolveDirectSpeechVoice(speaker: number): { model: string; voice: string } {
+  return sakuraDirectSpeechVoices.get(speaker) ?? sakuraDirectSpeechVoices.get(3)!
 }
 
 function unsupported(engineName: string, feature: string): Error {
