@@ -5,7 +5,7 @@ import type { PoseSource } from '~/features/poses/types'
 import { useColorScheme } from '../hooks/useColorScheme'
 import type { MouthRef } from '../hooks/useLipSync'
 import { useRenderSettings } from '../hooks/useRenderSettings'
-import type { VrmSource } from '../types'
+import type { VrmPlayerState, VrmSource } from '../types'
 import { VRMScene } from './VRMScene'
 
 // drei の OrbitControls はサードパーティ実装（three-stdlib）を ref に出すので、
@@ -20,6 +20,7 @@ interface VRMCanvasProps {
   expression?: { name: string; weight: number } | null
   // 吹き出しに出すテキスト。null のときは吹き出しを描画しない。
   speechText: string | null
+  gaze?: VrmPlayerState['currentSegmentGaze']
   currentIndex?: number | null
   totalSegments?: number
   hasSegments?: boolean
@@ -190,6 +191,7 @@ export function VRMCanvas({
   pose,
   expression,
   speechText,
+  gaze = null,
   currentIndex = null,
   totalSegments = 0,
   hasSegments = false,
@@ -255,6 +257,9 @@ export function VRMCanvas({
               expression={expression}
               mouthRef={mouthRef}
               blinkEnabled={renderSettings.blinkEnabled}
+              lookAtCamera={renderSettings.lookAtCamera}
+              gaze={gaze}
+              headTrackCamera={renderSettings.headTrackCamera}
               poseEasing={renderSettings.poseEasing}
               expressionTransitionMs={renderSettings.expressionTransitionMs}
               onCenterReady={setCenterY}

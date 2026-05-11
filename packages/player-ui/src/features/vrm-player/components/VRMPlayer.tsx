@@ -1,7 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import type { PoseSource } from '~/features/poses/types'
 import type { MouthRef } from '../hooks/useLipSync'
-import type { VrmSource } from '../types'
+import type { VrmPlayerState, VrmSource } from '../types'
 import { PlayerHeader } from './PlayerHeader'
 import { VRMCanvas } from './VRMCanvas'
 
@@ -12,6 +12,7 @@ interface VRMPlayerProps {
   pose?: PoseSource | null
   expression?: { name: string; weight: number } | null
   speechText: string | null
+  gaze: VrmPlayerState['currentSegmentGaze']
   activeModelId: string | null
   listRefreshKey: number
   isPlaying: boolean
@@ -45,6 +46,7 @@ export function VRMPlayer({
   pose,
   expression,
   speechText,
+  gaze,
   activeModelId,
   listRefreshKey,
   isPlaying,
@@ -105,6 +107,7 @@ export function VRMPlayer({
           pose={pose}
           expression={expression}
           speechText={speechText}
+          gaze={gaze}
           currentIndex={currentIndex}
           totalSegments={totalSegments}
           fullscreen={fullscreen}

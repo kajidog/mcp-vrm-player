@@ -26,6 +26,7 @@ export interface PlayerSegmentState {
   pose?: string
   poseFallbackReason?: string
   emotion?: string
+  gaze?: 'camera' | 'away' | 'front'
   expressionName?: string
   expressionWeight?: number
 }

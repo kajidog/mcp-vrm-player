@@ -5,9 +5,11 @@ import { useEffect, useRef, useState } from 'react'
 import {
   type AnimationAction,
   AnimationMixer,
+  Euler,
   LoopOnce,
   LoopRepeat,
-  type Object3D,
+  Matrix4,
+  Object3D,
   type Quaternion,
   Vector3,
 } from 'three'
@@ -15,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DEFAULT_POSE_ID, POSE_PRESETS } from '~/features/poses/presets'
 import type { PoseSource } from '~/features/poses/types'
 import type { MouthRef } from '../hooks/useLipSync'
-import type { VrmSource } from '../types'
+import type { VrmPlayerState, VrmSource } from '../types'
 
 const DEFAULT_POSE_SOURCE: PoseSource = {
   kind: 'builtin',
@@ -33,6 +35,12 @@ interface VRMSceneProps {
   mouthRef?: MouthRef
   // 自動瞬き。OFF のときは blink 系表情へは何も書き込まない。
   blinkEnabled?: boolean
+  // セグメントごとの視線演出を動かすかどうか。OFF のときは target を外して正面固定にする。
+  lookAtCamera?: boolean
+  // 現在セグメントの視線指定。未指定は従来互換でカメラ目線。
+  gaze?: VrmPlayerState['currentSegmentGaze']
+  // 頭ボーンをカメラ方向に回すかどうか。lookAt より大きな動きで首ごとこちらを向く。
+  headTrackCamera?: boolean
   poseEasing?: 'linear' | 'easeInOutQuad'
   expressionTransitionMs?: number
   // VRM ロード完了後、Canvas へ「キャラ上半身付近の y」を通知する。
@@ -64,6 +72,22 @@ function nextBlinkInterval(): number {
 // ポーズ切替時のクロスブレンド秒数。短すぎるとカクつき、長すぎると次の動きに遅延が乗る。
 const POSE_TRANSITION_DURATION = 0.35
 
+// 頭ボーンの追従可動範囲。ヒトの首の限界を意識して上下より左右を広めに取る。
+const HEAD_TRACK_YAW_LIMIT = Math.PI / 3 // 60°
+const HEAD_TRACK_PITCH_LIMIT = (Math.PI / 180) * 25 // 25°
+const HEAD_FACE_FRONT_DEFAULT = new Vector3(0, 0, 1)
+
+// useFrame で毎回 new しないための共有テンポラリ。
+const _headCamWorld = new Vector3()
+const _headCamLocal = new Vector3()
+const _headDir = new Vector3()
+const _headFaceFront = new Vector3(0, 0, 1)
+const _headParentInv = new Matrix4()
+const _headEuler = new Euler()
+const _lookAwayCamDir = new Vector3()
+const _lookAwayRight = new Vector3()
+const _lookAwayUp = new Vector3()
+
 interface PoseTransition {
   // 経過秒。duration 到達で完了。
   elapsed: number
@@ -80,6 +104,15 @@ function easePose(t: number, easing: 'linear' | 'easeInOutQuad'): number {
   return easing === 'linear' ? t : easeInOutQuad(t)
 }
 
+function calcAzimuthAltitude(vector: Vector3): [number, number] {
+  return [Math.atan2(-vector.z, vector.x), Math.atan2(vector.y, Math.sqrt(vector.x * vector.x + vector.z * vector.z))]
+}
+
+function sanitizeAngle(angle: number): number {
+  const roundTurn = Math.round(angle / 2 / Math.PI)
+  return angle - 2 * Math.PI * roundTurn
+}
+
 /**
  * 渡された VrmSource を three.js シーンに常駐表示するコンポーネント。
  * `source.data`（バイナリ）か `source.src`（URL）のいずれかからロードする。
@@ -91,6 +124,9 @@ export function VRMScene({
   expression,
   mouthRef,
   blinkEnabled = true,
+  lookAtCamera = true,
+  gaze = null,
+  headTrackCamera = false,
   poseEasing = 'easeInOutQuad',
   expressionTransitionMs = 120,
   onCenterReady,
@@ -108,6 +144,10 @@ export function VRMScene({
   const poseRef = useRef<PoseSource>(pose ?? DEFAULT_POSE_SOURCE)
   const expressionRef = useRef<{ name: string; weight: number } | null>(expression ?? null)
   const blinkEnabledRef = useRef(blinkEnabled)
+  const lookAtCameraRef = useRef(lookAtCamera)
+  const gazeRef = useRef<VrmPlayerState['currentSegmentGaze']>(gaze)
+  const headTrackCameraRef = useRef(headTrackCamera)
+  const lookAwayTargetRef = useRef<Object3D>(new Object3D())
   const poseEasingRef = useRef(poseEasing)
   const expressionTransitionMsRef = useRef(expressionTransitionMs)
   const expressionWeightsRef = useRef<Map<string, number>>(new Map())
@@ -139,6 +179,18 @@ export function VRMScene({
       blinkStateRef.current = { nextAt: nextBlinkInterval(), progress: null }
     }
   }, [blinkEnabled])
+
+  useEffect(() => {
+    lookAtCameraRef.current = lookAtCamera
+  }, [lookAtCamera])
+
+  useEffect(() => {
+    gazeRef.current = gaze
+  }, [gaze])
+
+  useEffect(() => {
+    headTrackCameraRef.current = headTrackCamera
+  }, [headTrackCamera])
 
   useEffect(() => {
     poseEasingRef.current = poseEasing
@@ -372,15 +424,24 @@ export function VRMScene({
     }
   }, [vrm, pose])
 
-  // 目線追従: vrm.lookAt.target にカメラを刺すと vrm.update() が眼/頭骨を毎フレーム回す。
+  // 目線追従: vrm.lookAt.target にカメラまたは視線外し用の仮 target を刺すと、
+  // vrm.update() が眼/頭骨を毎フレーム回す。
   // モデル差し替え時は新しい vrm に対して再度設定する必要がある。
+  // lookAtCamera=false のときは target を外し、resetNormalizedPose で残った首の傾きをクリアする。
   useEffect(() => {
     if (!vrm?.lookAt) return
-    vrm.lookAt.target = camera
+    if (!lookAtCamera || gaze === 'front') {
+      vrm.lookAt.target = null
+      vrm.lookAt.reset()
+    } else if (gaze === 'away') {
+      vrm.lookAt.target = lookAwayTargetRef.current
+    } else {
+      vrm.lookAt.target = camera
+    }
     return () => {
       if (vrm.lookAt) vrm.lookAt.target = null
     }
-  }, [vrm, camera])
+  }, [vrm, camera, lookAtCamera, gaze])
 
   // 毎フレーム delta を渡して spring bone / 表情 / lookAt をシミュレーションする。
   // ポーズはヒューマノイドの正規化ボーン回転を上書きするので、vrm.update() の前に
@@ -389,6 +450,17 @@ export function VRMScene({
   useFrame((_, delta) => {
     if (!vrm) return
     elapsedRef.current += delta
+    if (lookAtCameraRef.current && gazeRef.current === 'away') {
+      camera.getWorldPosition(_headCamWorld)
+      camera.getWorldDirection(_lookAwayCamDir)
+      _lookAwayRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
+      _lookAwayUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize()
+      lookAwayTargetRef.current.position
+        .copy(_headCamWorld)
+        .addScaledVector(_lookAwayCamDir, -0.25)
+        .addScaledVector(_lookAwayRight, 0.75)
+        .addScaledVector(_lookAwayUp, 0.25)
+    }
     const poseSource = poseRef.current
     if (poseSource.kind === 'builtin') {
       mixerRef.current?.stopAllAction()
@@ -413,6 +485,32 @@ export function VRMScene({
       } else {
         for (const [node, fromQuat] of transition.from) {
           node.quaternion.slerp(fromQuat, blendBack)
+        }
+      }
+    }
+    // 頭ボーン追従: 親（多くは Neck）のローカル空間でカメラ方向を求め、VRM の faceFront を
+    // 基準に yaw/pitch へ変換する。VRM0 は faceFront=-Z なので +Z 固定にすると逆を向く。
+    if (headTrackCameraRef.current) {
+      const headNode = vrm.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Head)
+      const parent = headNode?.parent
+      if (headNode && parent) {
+        parent.updateWorldMatrix(true, false)
+        _headParentInv.copy(parent.matrixWorld).invert()
+        camera.getWorldPosition(_headCamWorld)
+        _headCamLocal.copy(_headCamWorld).applyMatrix4(_headParentInv)
+        _headDir.copy(_headCamLocal).sub(headNode.position)
+        if (_headDir.lengthSq() > 1e-6) {
+          _headDir.normalize()
+          _headFaceFront.copy(vrm.lookAt?.faceFront ?? HEAD_FACE_FRONT_DEFAULT).normalize()
+          const [azimuthFrom, altitudeFrom] = calcAzimuthAltitude(_headFaceFront)
+          const [azimuthTo, altitudeTo] = calcAzimuthAltitude(_headDir)
+          const yaw = sanitizeAngle(azimuthTo - azimuthFrom)
+          // lookAt の pitch は目線 applier 向けの符号なので、頭ボーンの X 回転では上下を反転する。
+          const pitch = sanitizeAngle(altitudeTo - altitudeFrom)
+          const clampedYaw = Math.max(-HEAD_TRACK_YAW_LIMIT, Math.min(HEAD_TRACK_YAW_LIMIT, yaw))
+          const clampedPitch = Math.max(-HEAD_TRACK_PITCH_LIMIT, Math.min(HEAD_TRACK_PITCH_LIMIT, pitch))
+          _headEuler.set(clampedPitch, clampedYaw, 0, 'YXZ')
+          headNode.quaternion.setFromEuler(_headEuler)
         }
       }
     }

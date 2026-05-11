@@ -650,6 +650,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     currentTime: playback.currentTime,
     duration: playback.duration,
     currentSegmentText: playback.currentSegmentText,
+    currentSegmentGaze: playback.currentSegmentGaze,
     speakerIconUrl,
     activeModel,
     isPlaying: playback.isPlaying,

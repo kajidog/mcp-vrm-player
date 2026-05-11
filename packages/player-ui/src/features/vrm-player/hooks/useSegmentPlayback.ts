@@ -249,6 +249,7 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
     canReplay: currentSegmentIndex === null && segments.length > 0,
     hasSegments: segments.length > 0,
     currentSegmentText: currentSegmentIndex !== null ? (segments[currentSegmentIndex]?.text ?? null) : null,
+    currentSegmentGaze: currentSegmentIndex !== null ? (segments[currentSegmentIndex]?.gaze ?? null) : null,
     startPlayback,
     updateSegments,
     stopPlayback,

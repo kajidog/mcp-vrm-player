@@ -1,11 +1,11 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useState } from 'react'
-import { DPR_OPTIONS, POSE_EASING_OPTIONS, useRenderSettings } from '../hooks/useRenderSettings'
 import {
   type PlayerSettings,
   fetchPlayerSettingsOnServer,
   setPlayerSettingsOnServer,
 } from '../hooks/vrmPlayerToolClient'
+import { SettingNumber, SettingToggle } from './SettingsControls'
 
 interface SettingsViewProps {
   app: App
@@ -24,7 +24,6 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
   const [values, setValues] = useState<PlayerSettings>({ speedScale: 1, autoPlay: true, usePublicVrms: true })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { settings: renderSettings, update: updateRenderSettings } = useRenderSettings()
 
   useEffect(() => {
     let cancelled = false
@@ -137,7 +136,7 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
           <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             disabled={loading || busy}
@@ -157,49 +156,6 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
         </div>
       </div>
 
-      <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
-        <div className="mb-3 text-xs font-semibold text-[var(--ui-text)]">表示</div>
-        <div className="space-y-3">
-          <SettingSelect
-            label="解像度"
-            description="高くするほど精細に見えますが描画負荷が上がります。"
-            value={renderSettings.dprMax}
-            options={DPR_OPTIONS}
-            onChange={(dprMax) => updateRenderSettings({ dprMax })}
-          />
-          <SettingToggle
-            label="瞬き"
-            checked={renderSettings.blinkEnabled}
-            defaultValue={true}
-            onChange={(blinkEnabled) => updateRenderSettings({ blinkEnabled })}
-          />
-          <SettingSelect
-            label="ポーズ遷移"
-            value={renderSettings.poseEasing}
-            options={POSE_EASING_OPTIONS}
-            onChange={(poseEasing) => updateRenderSettings({ poseEasing })}
-          />
-          <SettingNumber
-            label="表情フェード(ms)"
-            value={renderSettings.expressionTransitionMs}
-            min={0}
-            max={500}
-            step={10}
-            defaultValue={120}
-            onChange={(expressionTransitionMs) => updateRenderSettings({ expressionTransitionMs })}
-          />
-          <SettingNumber
-            label="口パク補正(ms)"
-            value={renderSettings.moraTimingOffsetMs}
-            min={-200}
-            max={200}
-            step={10}
-            defaultValue={0}
-            onChange={(moraTimingOffsetMs) => updateRenderSettings({ moraTimingOffsetMs })}
-          />
-        </div>
-      </div>
-
       <button
         type="button"
         onClick={onOpenPoses}
@@ -208,117 +164,5 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
         ポーズ管理
       </button>
     </div>
-  )
-}
-
-function SettingToggle({
-  label,
-  checked,
-  defaultValue,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  defaultValue: boolean
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <label className="flex items-center justify-between gap-3 text-xs text-[var(--ui-text)]">
-      <div>
-        <div className="font-semibold">{label}</div>
-        <div className="text-[var(--ui-text-secondary)]">既定: {defaultValue ? 'ON' : 'OFF'}</div>
-      </div>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 accent-[var(--ui-accent)]"
-      />
-    </label>
-  )
-}
-
-function SettingSelect<T extends number | string>({
-  label,
-  description,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  description?: string
-  value: T
-  options: Array<{ value: T; label: string }>
-  onChange: (value: T) => void
-}) {
-  return (
-    <label className="block text-xs text-[var(--ui-text)]">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="font-semibold">{label}</span>
-        {description ? <span className="text-[var(--ui-text-secondary)]">{description}</span> : null}
-      </div>
-      <select
-        value={String(value)}
-        onChange={(event) => {
-          const raw = event.target.value
-          const next = typeof options[0]?.value === 'number' ? (Number(raw) as T) : (raw as T)
-          onChange(next)
-        }}
-        className="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-xs text-[var(--ui-text)]"
-      >
-        {options.map((option) => (
-          <option key={String(option.value)} value={String(option.value)}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
-function SettingNumber({
-  label,
-  value,
-  min,
-  max,
-  step,
-  defaultValue,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  defaultValue?: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <label className="block text-xs text-[var(--ui-text)]">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="font-semibold">{label}</span>
-        <span className="text-[var(--ui-text-secondary)]">既定: {defaultValue ?? 'VOICEVOX'}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="vv-slider min-w-0 flex-1"
-        />
-        <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={Number(value.toFixed(2))}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="w-20 rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] px-2 py-1 text-right text-xs text-[var(--ui-text)]"
-        />
-      </div>
-    </label>
   )
 }

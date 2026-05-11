@@ -8,6 +8,10 @@ export interface RenderSettings {
   dprMax: number
   // 自動瞬きの有無。
   blinkEnabled: boolean
+  // セグメントごとの視線演出を有効化するかどうか。OFF で真正面を見続ける。
+  lookAtCamera: boolean
+  // 頭ボーン自体をカメラ方向へ回すかどうか。lookAt より大きな動きで、首ごとこちらを向く。
+  headTrackCamera: boolean
   poseEasing: 'linear' | 'easeInOutQuad'
   expressionTransitionMs: number
   moraTimingOffsetMs: number
@@ -16,6 +20,8 @@ export interface RenderSettings {
 export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   dprMax: 1.5,
   blinkEnabled: true,
+  lookAtCamera: true,
+  headTrackCamera: false,
   poseEasing: 'easeInOutQuad',
   expressionTransitionMs: 120,
   moraTimingOffsetMs: 0,
@@ -43,6 +49,10 @@ function load(): RenderSettings {
       dprMax: typeof parsed.dprMax === 'number' && parsed.dprMax > 0 ? parsed.dprMax : DEFAULT_RENDER_SETTINGS.dprMax,
       blinkEnabled:
         typeof parsed.blinkEnabled === 'boolean' ? parsed.blinkEnabled : DEFAULT_RENDER_SETTINGS.blinkEnabled,
+      lookAtCamera:
+        typeof parsed.lookAtCamera === 'boolean' ? parsed.lookAtCamera : DEFAULT_RENDER_SETTINGS.lookAtCamera,
+      headTrackCamera:
+        typeof parsed.headTrackCamera === 'boolean' ? parsed.headTrackCamera : DEFAULT_RENDER_SETTINGS.headTrackCamera,
       poseEasing:
         parsed.poseEasing === 'linear' || parsed.poseEasing === 'easeInOutQuad'
           ? parsed.poseEasing

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PoseListView } from './features/poses/PoseListView'
+import { RenderSettingsPanel } from './features/vrm-player/components/RenderSettingsPanel'
 import { SettingsView } from './features/vrm-player/components/SettingsView'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
 import { useDisplayMode } from './features/vrm-player/hooks/useDisplayMode'
@@ -69,6 +70,9 @@ export function McpApp() {
   const [view, setView] = useState<View>('player')
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
   const [listRefreshKey, setListRefreshKey] = useState(0)
+  // 表示系設定（renderSettings）はプレイヤーを裏で動かしたままドロワーで開閉する。
+  // 音声系（PlayerSettings）は view='settings' で全画面遷移。
+  const [renderPanelOpen, setRenderPanelOpen] = useState(false)
   const player = useVrmPlayerApp()
   const displayMode = useDisplayMode(player.app)
   const fullscreen = displayMode.displayMode === 'fullscreen'
@@ -133,7 +137,7 @@ export function McpApp() {
   }
 
   if (view === 'poses') {
-    return <PoseListView app={player.app} onBack={() => setView('settings')} />
+    return <PoseListView app={player.app} onBack={() => setView('player')} />
   }
 
   const preparing = player.loadingPhase !== 'idle' && player.loadingPhase !== 'ready' && player.loadingPhase !== 'error'
@@ -155,6 +159,7 @@ export function McpApp() {
           pose={player.pose}
           expression={player.expression}
           speechText={player.currentSegmentText}
+          gaze={player.currentSegmentGaze}
           activeModelId={player.activeModel?.id ?? null}
           listRefreshKey={listRefreshKey}
           isPlaying={player.isPlaying}
@@ -175,7 +180,7 @@ export function McpApp() {
           onModelError={player.setModelError}
           onVrmLoadStart={player.notifyVrmLoadStart}
           onVrmLoaded={player.notifyVrmLoaded}
-          onOpenSettings={() => setView('settings')}
+          onOpenSettings={() => setRenderPanelOpen(true)}
           onAddModel={() => {
             setEditingModelId(null)
             setView('register')
@@ -192,6 +197,19 @@ export function McpApp() {
       </div>
       {showErrorStatus ? <ErrorStatus message={player.errorMsg} /> : null}
       {preparing ? <LoadingOverlay phase={player.loadingPhase} progress={player.loadingProgress} /> : null}
+      {renderPanelOpen ? (
+        <RenderSettingsPanel
+          onClose={() => setRenderPanelOpen(false)}
+          onOpenServerSettings={() => {
+            setRenderPanelOpen(false)
+            setView('settings')
+          }}
+          onOpenPoses={() => {
+            setRenderPanelOpen(false)
+            setView('poses')
+          }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -63,6 +63,8 @@ export interface VrmPlayerState {
   duration: number
   // 吹き出し表示用に切り出した「現在再生中のセグメントのテキスト」。
   currentSegmentText: string | null
+  // 現在再生中のセグメントの視線指定。未指定時は従来互換でカメラ目線扱い。
+  currentSegmentGaze: PoseSegment['gaze'] | null
   speakerIconUrl?: string
   // 現在表示している登録モデル情報（モデル切替で更新）。
   activeModel: {

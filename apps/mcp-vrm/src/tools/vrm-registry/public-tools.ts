@@ -79,6 +79,7 @@ export function registerVrmPublicTools(
             : null,
           defaultPoses: DEFAULT_POSE_NAMES,
           emotions: EMOTION_NAMES,
+          gaze: ['camera', 'away', 'front'],
           settings: {
             autoPlay: effectiveSettings.autoPlay,
             speedScale: effectiveSettings.speedScale,
@@ -103,7 +104,7 @@ export function registerVrmPublicTools(
     {
       title: 'Find VRM Models',
       description:
-        'Find registered VRM models and valid pose names. Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player.',
+        'Find registered VRM models and valid pose names. Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player. Per-segment gaze values are camera, away, or front.',
       inputSchema: {
         modelId: z.string().optional().describe('Exact VRM model ID to look up.'),
         query: z.string().optional().describe('Case-insensitive search text matched against model name or ID.'),
@@ -212,7 +213,7 @@ export function registerVrmPublicTools(
     {
       title: 'List VRMs',
       description:
-        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model poses, and emotion bindings. Pass segments[].pose as one of poses[].name and segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious. Returns metadata only (no binary).',
+        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model poses, and emotion bindings. Pass segments[].pose as one of poses[].name, segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious, and segments[].gaze as camera/away/front. Returns metadata only (no binary).',
       inputSchema: {},
       annotations: {
         readOnlyHint: true,

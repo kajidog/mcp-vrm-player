@@ -15,6 +15,7 @@ import type { PlayerRuntime } from './runtime.js'
 
 interface SegmentInput {
   emotion?: string
+  gaze?: 'camera' | 'away' | 'front'
   pose?: string
   speedScale?: number
   text: string
@@ -29,6 +30,7 @@ interface ResolvedSegment {
   pose?: string
   poseFallbackReason?: string
   emotion: EmotionName
+  gaze?: 'camera' | 'away' | 'front'
   expressionName?: string
   expressionWeight?: number
 }
@@ -42,7 +44,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     'speak_player',
     {
       title: 'Speak Player',
-      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose?, speedScale? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names. Emotions are fixed values: ${EMOTION_GUIDE}. speedScale is optional per segment and overrides player speed settings for that segment.`,
+      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose?, gaze?, speedScale? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names. Emotions are fixed values: ${EMOTION_GUIDE}. gaze is optional per segment: camera means eye contact, away means looking away from the camera, front means neutral forward gaze. speedScale is optional per segment and overrides player speed settings for that segment.`,
       inputSchema: {
         modelId: z.string().optional().describe('VRM model ID. Falls back to the registered default model.'),
         segments: z
@@ -59,6 +61,12 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 .enum(EMOTION_NAMES)
                 .optional()
                 .describe(`Emotion for this segment. Fixed values: ${EMOTION_GUIDE}.`),
+              gaze: z
+                .enum(['camera', 'away', 'front'])
+                .optional()
+                .describe(
+                  'Eye gaze for this segment. camera = eye contact with the viewer, away = glance away from the camera, front = neutral forward gaze. Omit to keep the default camera gaze.'
+                ),
               speedScale: z
                 .number()
                 .min(0.5)
@@ -127,6 +135,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             pose: resolvedPose.pose,
             ...(resolvedPose.fallbackReason ? { poseFallbackReason: resolvedPose.fallbackReason } : {}),
             emotion,
+            ...(s.gaze !== undefined ? { gaze: s.gaze } : {}),
             ...(binding?.expressionName ? { expressionName: binding.expressionName } : {}),
             ...(binding?.weight !== undefined ? { expressionWeight: binding.weight } : {}),
           }
@@ -181,6 +190,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             ...(s.pose !== undefined ? { pose: s.pose } : {}),
             ...(s.poseFallbackReason !== undefined ? { poseFallbackReason: s.poseFallbackReason } : {}),
             emotion: s.emotion,
+            ...(s.gaze !== undefined ? { gaze: s.gaze } : {}),
             ...(s.expressionName !== undefined ? { expressionName: s.expressionName } : {}),
             ...(s.expressionWeight !== undefined ? { expressionWeight: s.expressionWeight } : {}),
           })),
@@ -206,6 +216,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
           ...(s.pose !== undefined ? { pose: s.pose } : {}),
           ...(s.poseFallbackReason !== undefined ? { poseFallbackReason: s.poseFallbackReason } : {}),
           emotion: s.emotion,
+          ...(s.gaze !== undefined ? { gaze: s.gaze } : {}),
           ...(s.expressionName !== undefined ? { expressionName: s.expressionName } : {}),
           ...(s.expressionWeight !== undefined ? { expressionWeight: s.expressionWeight } : {}),
         }))

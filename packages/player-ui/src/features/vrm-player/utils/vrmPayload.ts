@@ -104,6 +104,7 @@ export interface PoseSegment {
   pose?: string
   poseFallbackReason?: string
   emotion?: string
+  gaze?: 'camera' | 'away' | 'front'
   expressionName?: string
   expressionWeight?: number
   text: string
@@ -134,6 +135,7 @@ function pickPoseSegments(source: unknown): PoseSegment[] | null {
       pose: readString(segment, 'pose'),
       poseFallbackReason: readString(segment, 'poseFallbackReason'),
       emotion: readString(segment, 'emotion'),
+      gaze: readSegmentGaze(segment),
       expressionName: readString(segment, 'expressionName'),
       expressionWeight: typeof segment.expressionWeight === 'number' ? segment.expressionWeight : undefined,
       speedScale: typeof segment.speedScale === 'number' ? segment.speedScale : undefined,
@@ -148,6 +150,11 @@ function pickPoseSegments(source: unknown): PoseSegment[] | null {
     })
   }
   return result.length > 0 ? result : null
+}
+
+function readSegmentGaze(record: Record<string, unknown>): PoseSegment['gaze'] {
+  const value = readString(record, 'gaze')
+  return value === 'camera' || value === 'away' || value === 'front' ? value : undefined
 }
 
 /**
