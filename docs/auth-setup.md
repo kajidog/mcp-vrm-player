@@ -47,12 +47,18 @@ https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json
 Supabase 側で行うこと:
 
 1. Supabase プロジェクトを作成する。
-2. Authentication の providers で GitHub、Google、Email など必要なログイン方法を有効化する。
-3. Authentication の URL/Redirect URL 設定に web auth UI の URL を追加する。
+2. Project Settings > API Keys で Project URL と publishable key、または legacy anon key を確認する。
+   - Project URL は `VITE_SUPABASE_URL` に使います。
+   - publishable key または legacy anon key は `VITE_SUPABASE_ANON_KEY` に使います。
+3. Authentication の providers で GitHub、Google、Email など必要なログイン方法を有効化する。
+4. Authentication の URL/Redirect URL 設定に web auth UI の URL を追加する。
    - 開発例: `http://localhost:5173`
    - 本番例: `https://your-auth.example.com`
-4. JWT signing keys が JWKS で検証できる非対称鍵になっていることを確認する。
-5. `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を `apps/web-auth/.env` に設定する。
+5. JWT signing keys が JWKS で検証できる非対称鍵になっていることを確認する。
+   - legacy JWT secret のままだと公開 JWKS でローカル検証できません。
+   - Supabase Dashboard の JWT signing keys page で非対称鍵に移行し、必要に応じて Rotate key で有効化します。
+6. `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を `apps/web-auth/.env` に設定する。
+7. MCP サーバー側に `MCP_AUTH_SERVER_URL`、`MCP_JWKS_URI`、必要なら `MCP_ISSUER` を設定する。
 
 <details>
 <summary>GitHub provider を使う場合</summary>

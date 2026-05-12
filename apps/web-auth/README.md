@@ -14,6 +14,15 @@ cp .env.example .env
 
 #### Supabase モード（本番用）
 
+Supabase Dashboard で次を設定します。
+
+1. Authentication > URL Configuration にこの web auth UI の URL を追加する。
+   - 開発: `http://localhost:5173`
+   - 本番: `https://your-auth.example.com`
+2. Authentication > Sign In / Providers で使うログイン方法を有効化する。
+3. Project Settings > API Keys で Project URL と publishable key、または legacy anon key を確認する。
+4. JWT signing keys が JWKS で検証できる非対称鍵になっていることを確認する。
+
 ```bash
 # .env
 VITE_AUTH_MODE=supabase
@@ -21,9 +30,13 @@ VITE_SUPABASE_URL=https://xxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-Supabase の Authentication 設定で Redirect URLs に以下を追加:
-- `http://localhost:5173` (開発用)
-- `https://your-github-pages-url` (本番用)
+GitHub provider を使う場合は、GitHub OAuth App の Authorization callback URL に Supabase が表示する callback URL を設定します。通常は次の形式です。
+
+```text
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+MCP サーバー側の Supabase 設定や GitHub provider の詳細手順は [../../docs/auth-setup.md](../../docs/auth-setup.md) を参照してください。
 
 #### ローカルモード（開発用）
 
