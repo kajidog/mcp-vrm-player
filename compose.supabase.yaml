@@ -6,6 +6,7 @@ services:
       MCP_AUTH_SERVER_URL: ${MCP_AUTH_SERVER_URL}
       MCP_JWKS_URI: ${MCP_JWKS_URI}
       MCP_ISSUER: ${MCP_ISSUER:-}
+      MCP_OAUTH_AUDIENCE: ${MCP_OAUTH_AUDIENCE:-authenticated}
       MCP_RESOURCE_NAME: ${MCP_RESOURCE_NAME:-VRM MCP Server}
 
   web-auth:

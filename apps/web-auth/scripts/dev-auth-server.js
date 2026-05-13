@@ -6,6 +6,7 @@ const PORT = process.env.PORT || 3001
 const HOST = 'localhost'
 const ISSUER = process.env.MCP_AUTH_SERVER_URL || `http://${HOST}:${PORT}`
 const RESOURCE_NAME = process.env.MCP_RESOURCE_NAME || 'VRM MCP Server'
+const RESOURCE_AUDIENCE = process.env.MCP_OAUTH_AUDIENCE || process.env.MCP_SERVER_URL || RESOURCE_NAME
 
 // Store for codes
 const codes = new Map()
@@ -121,7 +122,7 @@ const server = http.createServer(async (req, res) => {
         .setProtectedHeader({ alg: 'RS256', kid: 'dev-key-1' })
         .setIssuedAt()
         .setIssuer(ISSUER)
-        .setAudience(RESOURCE_NAME)
+        .setAudience(RESOURCE_AUDIENCE)
         .setExpirationTime('1h')
         .sign(privateKey)
 
@@ -157,7 +158,7 @@ const server = http.createServer(async (req, res) => {
         authorization_endpoint: `${ISSUER}/authorize`,
         token_endpoint: `${ISSUER}/token`,
         jwks_uri: `${ISSUER}/.well-known/jwks.json`,
-        scopes_supported: ['mcp:tools', 'mcp:resources'],
+        scopes_supported: ['openid', 'email', 'profile'],
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code'],
         token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
@@ -178,5 +179,6 @@ setupKeys().then(() => {
     console.log(`- Token:     http://${HOST}:${PORT}/token`)
     console.log(`- JWKS:      http://${HOST}:${PORT}/.well-known/jwks.json`)
     console.log(`- Metadata:  http://${HOST}:${PORT}/.well-known/oauth-authorization-server`)
+    console.log(`- Audience:  ${RESOURCE_AUDIENCE}`)
   })
 })

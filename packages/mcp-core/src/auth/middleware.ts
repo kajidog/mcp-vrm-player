@@ -24,13 +24,7 @@ export function bearerAuth(config: OAuthConfig, requiredScopes: string[] = []): 
     const token = authHeader.slice('Bearer '.length).trim()
 
     try {
-      const authInfo = await verifyAccessToken(
-        token,
-        config.jwksUri,
-        config.issuer,
-        config.mcpServerUrl,
-        requiredScopes
-      )
+      const authInfo = await verifyAccessToken(token, config.jwksUri, config.issuer, config.audience, requiredScopes)
       // Store auth info in context for downstream handlers
       c.set('auth', authInfo)
       await next()

@@ -97,7 +97,7 @@ function App() {
         client_id: 'demo-client',
         redirect_uri: callbackUrl,
         response_type: 'code',
-        scope: 'mcp:tools mcp:resources',
+        scope: 'openid email profile',
         state: state || 'demo',
       })}`
 

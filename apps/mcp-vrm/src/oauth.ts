@@ -8,12 +8,6 @@ export function createVrmOAuthHttpOptions(
   return {
     authConfig,
     authProtectedRoutes: authConfig ? [...VRM_AUTH_PROTECTED_ROUTES] : [],
-    authRequiredScopes: authConfig
-      ? {
-          '/mcp': ['mcp:tools'],
-          '/vrms/:fileName': ['mcp:resources'],
-          '/poses/:fileName': ['mcp:resources'],
-        }
-      : {},
+    authRequiredScopes: {},
   }
 }

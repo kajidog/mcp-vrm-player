@@ -6,6 +6,7 @@ export interface OAuthConfig {
   authServerUrl: string
   jwksUri: string
   issuer?: string
+  audience?: string
   scopesSupported: string[]
   resourceName: string
 }
@@ -22,6 +23,7 @@ export function createOAuthConfig(
     | 'oauthAuthServerUrl'
     | 'oauthJwksUri'
     | 'oauthIssuer'
+    | 'oauthAudience'
     | 'oauthScopes'
     | 'oauthResourceName'
   >,
@@ -38,6 +40,7 @@ export function createOAuthConfig(
     authServerUrl,
     jwksUri: config.oauthJwksUri || `${authServerUrl}/.well-known/jwks.json`,
     issuer: config.oauthIssuer,
+    audience: config.oauthAudience || config.mcpServerUrl,
     scopesSupported,
     resourceName: config.oauthResourceName || defaults.resourceName || 'MCP Server',
   }

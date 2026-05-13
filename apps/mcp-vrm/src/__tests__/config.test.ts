@@ -139,8 +139,10 @@ describe('config module', () => {
         'https://auth.example.com/jwks.json',
         '--oauth-issuer',
         'https://auth.example.com',
+        '--oauth-audience',
+        'authenticated',
         '--oauth-scopes',
-        'mcp:tools,mcp:resources',
+        'openid,email,profile',
         '--oauth-resource-name',
         'Custom MCP',
       ])
@@ -149,7 +151,8 @@ describe('config module', () => {
       expect(result.oauthAuthServerUrl).toBe('https://auth.example.com')
       expect(result.oauthJwksUri).toBe('https://auth.example.com/jwks.json')
       expect(result.oauthIssuer).toBe('https://auth.example.com')
-      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthAudience).toBe('authenticated')
+      expect(result.oauthScopes).toEqual(['openid', 'email', 'profile'])
       expect(result.oauthResourceName).toBe('Custom MCP')
     })
 
@@ -288,7 +291,8 @@ describe('config module', () => {
         MCP_AUTH_SERVER_URL: 'https://auth.example.com',
         MCP_JWKS_URI: 'https://auth.example.com/jwks.json',
         MCP_ISSUER: 'https://auth.example.com',
-        MCP_OAUTH_SCOPES: 'mcp:tools, mcp:resources',
+        MCP_OAUTH_AUDIENCE: 'authenticated',
+        MCP_OAUTH_SCOPES: 'openid, email, profile',
         MCP_RESOURCE_NAME: 'Custom MCP',
       })
       expect(result.oauthEnabled).toBe(true)
@@ -296,7 +300,8 @@ describe('config module', () => {
       expect(result.oauthAuthServerUrl).toBe('https://auth.example.com')
       expect(result.oauthJwksUri).toBe('https://auth.example.com/jwks.json')
       expect(result.oauthIssuer).toBe('https://auth.example.com')
-      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthAudience).toBe('authenticated')
+      expect(result.oauthScopes).toEqual(['openid', 'email', 'profile'])
       expect(result.oauthResourceName).toBe('Custom MCP')
     })
 
@@ -356,7 +361,8 @@ describe('config module', () => {
       expect(result.oauthAuthServerUrl).toBe('http://localhost:3001')
       expect(result.oauthJwksUri).toBeUndefined()
       expect(result.oauthIssuer).toBeUndefined()
-      expect(result.oauthScopes).toEqual(['mcp:tools', 'mcp:resources'])
+      expect(result.oauthAudience).toBeUndefined()
+      expect(result.oauthScopes).toEqual(['openid', 'email', 'profile'])
       expect(result.oauthResourceName).toBeUndefined()
       expect(result.engineApiKey).toBeUndefined()
     })

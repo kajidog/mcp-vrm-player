@@ -109,13 +109,21 @@ export const baseConfigDefs: ConfigDefs = {
     type: 'string',
     valueName: '<issuer>',
   },
+  oauthAudience: {
+    cli: '--oauth-audience',
+    env: 'MCP_OAUTH_AUDIENCE',
+    description: 'Expected OAuth JWT audience. Defaults to the MCP server URL',
+    group: 'OAuth Options',
+    type: 'string',
+    valueName: '<audience>',
+  },
   oauthScopes: {
     cli: '--oauth-scopes',
     env: 'MCP_OAUTH_SCOPES',
     description: 'Comma-separated OAuth scopes advertised by this resource server',
     group: 'OAuth Options',
     type: 'string[]',
-    default: ['mcp:tools', 'mcp:resources'],
+    default: ['openid', 'email', 'profile'],
     valueName: '<scopes>',
   },
   oauthResourceName: {
@@ -141,6 +149,7 @@ export interface BaseServerConfig {
   oauthAuthServerUrl: string
   oauthJwksUri?: string
   oauthIssuer?: string
+  oauthAudience?: string
   oauthScopes: string[]
   oauthResourceName?: string
 }

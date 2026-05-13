@@ -74,6 +74,7 @@ pnpm dev
 MCP_OAUTH_ENABLED=true
 MCP_AUTH_SERVER_URL=http://localhost:3001
 MCP_JWKS_URI=http://localhost:3001/.well-known/jwks.json
+MCP_OAUTH_AUDIENCE=http://localhost:3000
 MCP_RESOURCE_NAME="VRM MCP Server"
 ```
 

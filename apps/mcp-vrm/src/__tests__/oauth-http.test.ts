@@ -13,7 +13,7 @@ const baseConfig: BaseServerConfig = {
   oauthEnabled: false,
   mcpServerUrl: 'http://localhost:3000',
   oauthAuthServerUrl: 'http://localhost:3001',
-  oauthScopes: ['mcp:tools', 'mcp:resources'],
+  oauthScopes: ['openid', 'email', 'profile'],
 }
 
 const authConfig: OAuthConfig = {
@@ -21,7 +21,8 @@ const authConfig: OAuthConfig = {
   mcpServerUrl: 'http://localhost:3000',
   authServerUrl: 'http://localhost:3001',
   jwksUri: 'http://localhost:3001/.well-known/jwks.json',
-  scopesSupported: ['mcp:tools', 'mcp:resources'],
+  audience: 'http://localhost:3000',
+  scopesSupported: ['openid', 'email', 'profile'],
   resourceName: 'VRM MCP Server',
 }
 
@@ -139,7 +140,7 @@ describe('OAuth HTTP auth', () => {
       resource: 'http://localhost:3000',
       authorization_servers: ['http://localhost:3001'],
       jwks_uri: 'http://localhost:3001/.well-known/jwks.json',
-      scopes_supported: ['mcp:tools', 'mcp:resources'],
+      scopes_supported: ['openid', 'email', 'profile'],
     })
   })
 })
@@ -155,11 +156,7 @@ describe('VRM OAuth HTTP options', () => {
     expect(createVrmOAuthHttpOptions(authConfig)).toEqual({
       authConfig,
       authProtectedRoutes: [...VRM_AUTH_PROTECTED_ROUTES],
-      authRequiredScopes: {
-        '/mcp': ['mcp:tools'],
-        '/vrms/:fileName': ['mcp:resources'],
-        '/poses/:fileName': ['mcp:resources'],
-      },
+      authRequiredScopes: {},
     })
   })
 

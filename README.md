@@ -109,9 +109,10 @@ MCP_OAUTH_ENABLED=true
 MCP_SERVER_URL=http://localhost:3000
 MCP_AUTH_SERVER_URL=http://localhost:3001
 MCP_JWKS_URI=http://localhost:3001/.well-known/jwks.json
+MCP_OAUTH_AUDIENCE=http://localhost:3000
 MCP_RESOURCE_NAME="VRM MCP Server"
 ```
 
-`MCP_ISSUER` を指定した場合は JWT の `iss` も検証します。`MCP_OAUTH_SCOPES` はカンマ区切りで指定でき、既定は `mcp:tools,mcp:resources` です。OAuth 有効時は `MCP_API_KEY` より OAuth JWT が優先され、`/mcp` では API キー認証を要求しません。
+`MCP_ISSUER` を指定した場合は JWT の `iss` も検証します。`MCP_OAUTH_AUDIENCE` は JWT の `aud` 検証値で、未指定時は `MCP_SERVER_URL` を使います。Supabase OAuth Server を使う場合は通常 `authenticated` を指定します。`MCP_OAUTH_SCOPES` は metadata で公開するスコープで、既定は Supabase 標準の `openid,email,profile` です。OAuth 有効時は `MCP_API_KEY` より OAuth JWT が優先され、`/mcp` では API キー認証を要求しません。
 
 詳しいローカル開発手順、Supabase 設定、環境変数一覧は [docs/auth-setup.md](docs/auth-setup.md) を参照してください。

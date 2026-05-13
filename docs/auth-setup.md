@@ -23,6 +23,7 @@ MCP_SERVER_URL=http://localhost:3000 \
 MCP_AUTH_SERVER_URL=http://localhost:3001 \
 MCP_JWKS_URI=http://localhost:3001/.well-known/jwks.json \
 MCP_ISSUER=http://localhost:3001 \
+MCP_OAUTH_AUDIENCE=http://localhost:3000 \
 MCP_RESOURCE_NAME="VRM MCP Server" \
 pnpm --filter @kajidog/vrm-mcp dev
 ```
@@ -58,7 +59,7 @@ Supabase 側で行うこと:
    - legacy JWT secret のままだと公開 JWKS でローカル検証できません。
    - Supabase Dashboard の JWT signing keys page で非対称鍵に移行し、必要に応じて Rotate key で有効化します。
 6. `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を `apps/web-auth/.env` に設定する。
-7. MCP サーバー側に `MCP_AUTH_SERVER_URL`、`MCP_JWKS_URI`、必要なら `MCP_ISSUER` を設定する。
+7. MCP サーバー側に `MCP_AUTH_SERVER_URL`、`MCP_JWKS_URI`、`MCP_OAUTH_AUDIENCE=authenticated`、必要なら `MCP_ISSUER` を設定する。
 
 <details>
 <summary>GitHub provider を使う場合</summary>
@@ -110,11 +111,13 @@ MCP_SERVER_URL=https://your-mcp.example.com \
 MCP_AUTH_SERVER_URL=https://<project-ref>.supabase.co/auth/v1 \
 MCP_JWKS_URI=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json \
 MCP_ISSUER=https://<project-ref>.supabase.co/auth/v1 \
+MCP_OAUTH_AUDIENCE=authenticated \
 MCP_RESOURCE_NAME="VRM MCP Server" \
 pnpm --filter @kajidog/vrm-mcp start:http
 ```
 
 `MCP_ISSUER` は指定した場合だけ JWT の `iss` を検証します。Supabase プロジェクトの実際の issuer と一致しない場合は 401 になります。
+`MCP_OAUTH_AUDIENCE` は JWT の `aud` 検証値です。Supabase OAuth Server の access token は通常 `aud=authenticated` なので、Supabase 本番運用では `authenticated` を指定してください。
 
 
 ## 環境変数
@@ -127,10 +130,12 @@ pnpm --filter @kajidog/vrm-mcp start:http
 | `MCP_AUTH_SERVER_URL` | 認可サーバー URL。protected resource metadata の `authorization_servers` に使います。 | `http://localhost:3001` |
 | `MCP_JWKS_URI` | JWT 署名検証用の JWKS URL。未指定時は `${MCP_AUTH_SERVER_URL}/.well-known/jwks.json`。 | 未指定 |
 | `MCP_ISSUER` | JWT の `iss` 検証値。未指定なら issuer 検証を行いません。 | 未指定 |
-| `MCP_OAUTH_SCOPES` | metadata で公開するスコープ。カンマ区切りで指定します。 | `mcp:tools,mcp:resources` |
+| `MCP_OAUTH_AUDIENCE` | JWT の `aud` 検証値。未指定時は `MCP_SERVER_URL` を使います。Supabase OAuth Server では通常 `authenticated`。 | 未指定 |
+| `MCP_OAUTH_SCOPES` | metadata で公開するスコープ。カンマ区切りで指定します。Supabase OAuth Server は現時点でカスタム scope 未対応のため、既定では標準 scope のみ公開します。 | `openid,email,profile` |
 | `MCP_RESOURCE_NAME` | `WWW-Authenticate` realm と metadata の表示名。 | `VRM MCP Server` |
 
 OAuth 有効時は `MCP_API_KEY` より OAuth JWT を優先します。OAuth 無効時は既存どおり `MCP_API_KEY` による認証を利用できます。
+VRM MCP サーバーは Supabase OAuth Server との互換性を優先し、`mcp:tools` / `mcp:resources` のようなアプリ固有 scope は必須チェックしません。ユーザー分離は JWT の `sub` を使います。
 
 ## 確認方法
 
