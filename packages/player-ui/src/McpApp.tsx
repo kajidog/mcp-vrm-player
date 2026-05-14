@@ -1,3 +1,4 @@
+import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useState } from 'react'
 import { PoseListView } from './features/poses/PoseListView'
 import { RenderSettingsPanel } from './features/vrm-player/components/RenderSettingsPanel'
@@ -9,6 +10,48 @@ import type { VrmPlayerLoadingPhase } from './features/vrm-player/types'
 import { VrmRegisterView } from './features/vrm-registry/VrmRegisterView'
 
 type View = 'player' | 'settings' | 'register' | 'edit' | 'poses'
+
+function measureContentSize() {
+  const root = document.getElementById('root')
+  const target = root?.firstElementChild instanceof HTMLElement ? root.firstElementChild : root
+  if (!target) return null
+
+  const rect = target.getBoundingClientRect()
+  return {
+    width: Math.ceil(window.innerWidth),
+    height: Math.ceil(Math.max(rect.height, target.scrollHeight)),
+  }
+}
+
+function scheduleInlineSizeNotification(app: App) {
+  const rafIds: number[] = []
+  let cancelled = false
+
+  const notify = () => {
+    if (cancelled) return
+    const size = measureContentSize()
+    if (size && size.height > 0) void app.sendSizeChanged(size)
+  }
+
+  const scheduleAfterFrames = (frames: number) => {
+    if (frames <= 0) {
+      notify()
+      return
+    }
+    const rafId = window.requestAnimationFrame(() => scheduleAfterFrames(frames - 1))
+    rafIds.push(rafId)
+  }
+
+  // One frame catches the React commit; a later pass catches canvas/layout work
+  // that settles after the view switch.
+  scheduleAfterFrames(1)
+  scheduleAfterFrames(3)
+
+  return () => {
+    cancelled = true
+    for (const rafId of rafIds) window.cancelAnimationFrame(rafId)
+  }
+}
 
 function LoadingView({ label }: { label: string }) {
   return (
@@ -76,6 +119,12 @@ export function McpApp() {
   const player = useVrmPlayerApp()
   const displayMode = useDisplayMode(player.app)
   const fullscreen = displayMode.displayMode === 'fullscreen'
+  const inlineSizeNotificationTrigger = `${view}:${renderPanelOpen ? 'open' : 'closed'}`
+
+  useEffect(() => {
+    if (!player.app || fullscreen || !inlineSizeNotificationTrigger) return
+    return scheduleInlineSizeNotification(player.app)
+  }, [player.app, fullscreen, inlineSizeNotificationTrigger])
 
   useEffect(() => {
     const request = player.modelManagerRequest
