@@ -12,7 +12,7 @@ const TMP = join(process.cwd(), '__test_list_vrms_tmp__')
 const SAMPLE_VRM_BYTES = Buffer.from([0x67, 0x6c, 0x54, 0x46, 0x02, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00])
 const SAMPLE_VRM_BASE64 = SAMPLE_VRM_BYTES.toString('base64')
 
-function buildHarness(registry: VrmRegistryStore) {
+function buildHarness(registry: VrmRegistryStore, poseRegistry = new PoseRegistryStore({ cacheDir: TMP })) {
   const registrations: Array<{ name: string; handler: (args: Record<string, unknown>) => Promise<CallToolResult> }> = []
   const server = {
     registerTool: (
@@ -50,7 +50,7 @@ function buildHarness(registry: VrmRegistryStore) {
       disabledTools: new Set(),
     },
     registry,
-    new PoseRegistryStore({ cacheDir: TMP })
+    poseRegistry
   )
 
   return (toolName = 'list_vrms', args: Record<string, unknown> = {}) => {
@@ -150,6 +150,35 @@ describe('list_vrms public tool', () => {
     const structured = result.structuredContent as { models: Array<{ modelId: string; poses: string[] }> }
     expect(structured.models).toHaveLength(1)
     expect(structured.models[0].modelId).toBe(model.id)
-    expect(structured.models[0].poses).toContain('wave')
+    expect(structured.models[0].poses).toContain('idle')
+  })
+
+  it('MCP向けポーズ一覧はポーズ名で重複排除して返す', async () => {
+    const poseRegistry = new PoseRegistryStore({ cacheDir: TMP })
+    await poseRegistry.register({ id: 'wave_a', loop: true, vrmaBase64: SAMPLE_VRM_BASE64 })
+    await poseRegistry.register({ id: 'wave_b', loop: true, vrmaBase64: SAMPLE_VRM_BASE64 })
+    const model = await registry.register({
+      name: 'Alice',
+      speakerId: 7,
+      vrmBase64: SAMPLE_VRM_BASE64,
+      poses: [
+        { poseId: 'builtin:idle', name: 'idle' },
+        { poseId: 'wave_a', name: 'wave' },
+        { poseId: 'wave_b', name: 'wave' },
+      ],
+    })
+    const invoke = buildHarness(registry, poseRegistry)
+
+    const findResult = await invoke('find_models', { modelId: model.id })
+    expect(findResult.isError).toBeUndefined()
+    const findStructured = findResult.structuredContent as { models: Array<{ poses: string[] }> }
+    expect(findStructured.models[0].poses).toEqual(['idle', 'wave'])
+
+    const listResult = await invoke('list_vrms')
+    expect(listResult.isError).toBeUndefined()
+    const listStructured = listResult.structuredContent as {
+      vrms: Array<{ poses: string[] }>
+    }
+    expect(listStructured.vrms[0].poses).toEqual(['idle', 'wave'])
   })
 })

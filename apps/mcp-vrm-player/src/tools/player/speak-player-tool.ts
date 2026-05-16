@@ -44,7 +44,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     'speak_player',
     {
       title: 'Speak Player',
-      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose?, gaze?, speedScale? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names. Emotions are fixed values: ${EMOTION_GUIDE}. gaze is optional per segment: camera means eye contact, away means looking away from the camera, front means neutral forward gaze. speedScale is optional per segment and overrides player speed settings for that segment.`,
+      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose?, gaze?, speedScale? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names, then pass segments[].pose as a pose name only. Emotions are fixed values: ${EMOTION_GUIDE}. gaze is optional per segment: camera means eye contact, away means looking away from the camera, front means neutral forward gaze. speedScale is optional per segment and overrides player speed settings for that segment.`,
       inputSchema: {
         modelId: z.string().optional().describe('VRM model ID. Falls back to the registered default model.'),
         segments: z
@@ -55,7 +55,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 .string()
                 .optional()
                 .describe(
-                  'Pose name from vrm_find_models models[].poses, or built-in pose name such as idle, wave, or bow. Defaults to idle.'
+                  'Pose name from vrm_find_models models[].poses. Do not pass pose resource IDs. Defaults to idle.'
                 ),
               emotion: z
                 .enum(EMOTION_NAMES)
@@ -287,20 +287,19 @@ function resolveSegmentPose(
   requestedPose: string | undefined
 ): { pose: string; fallbackReason?: string } {
   const requested = requestedPose?.trim() || 'idle'
-  const matches = (modelPoses ?? []).filter((pose) => pose.name === requested || pose.poseId === requested)
-  const picked = matches[0]
-  if (picked) {
-    if (isBuiltinPoseResourceId(picked.poseId) || runtime.poseRegistry.get(picked.poseId)) {
-      return { pose: picked.name }
+  const matches = (modelPoses ?? []).filter((pose) => pose.name === requested)
+  if (matches.length > 0) {
+    const hasAvailableVariation = matches.some(
+      (pose) => isBuiltinPoseResourceId(pose.poseId) || runtime.poseRegistry.get(pose.poseId)
+    )
+    if (hasAvailableVariation) {
+      return { pose: requested }
     }
-    return { pose: 'idle', fallbackReason: `Pose resource not found: ${requested}` }
+    return { pose: 'idle', fallbackReason: `Pose resource not found for pose name: ${requested}` }
   }
 
   if ((BUILTIN_POSE_IDS as readonly string[]).includes(requested)) {
     return { pose: requested }
-  }
-  if (isBuiltinPoseResourceId(requested)) {
-    return { pose: requested.slice('builtin:'.length) }
   }
 
   const idleAttachment = (modelPoses ?? []).find((pose) => pose.poseId === toBuiltinPoseResourceId('idle'))

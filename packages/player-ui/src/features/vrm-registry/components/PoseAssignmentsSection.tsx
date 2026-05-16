@@ -54,7 +54,7 @@ export function PoseAssignmentsSection({
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] leading-relaxed text-[var(--ui-text-secondary)]">
           MCP
-          からポーズ名で呼び出します。同じポーズ名にバリエーションを複数登録すると、再生のたびに自動で切り替わります。
+          からポーズ名で呼び出します。同じポーズ名にバリエーションを複数登録すると、再生のたびにランダムで切り替わります。
         </div>
         <button
           type="button"

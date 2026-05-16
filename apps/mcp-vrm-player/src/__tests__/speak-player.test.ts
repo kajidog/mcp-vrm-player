@@ -35,7 +35,10 @@ interface CapturedRegistration {
 
 function buildHarness(
   registry: VrmRegistryStore,
-  options: { synthesizeWithCache?: PlayerRuntime['synthesizeWithCache'] } = {}
+  options: {
+    poseRegistry?: PoseRegistryStore
+    synthesizeWithCache?: PlayerRuntime['synthesizeWithCache']
+  } = {}
 ) {
   const registrations: CapturedRegistration[] = []
   const server = {
@@ -77,7 +80,7 @@ function buildHarness(
     getSessionState: (viewUUID, sessionId) => sessionStates.get(viewUUID ?? sessionId ?? 'global'),
     getSessionStateByKey: (key) => sessionStates.get(key),
     vrmRegistry: registry,
-    poseRegistry: new PoseRegistryStore({ cacheDir: TMP }),
+    poseRegistry: options.poseRegistry ?? new PoseRegistryStore({ cacheDir: TMP }),
     playerSettings: {
       applyDefaults: (input: Record<string, unknown>) => ({ ...input, speedScale: 1, autoPlay: true }),
     } as PlayerRuntime['playerSettings'],
@@ -124,8 +127,8 @@ describe('speak_player Phase 5', () => {
     const result = await harness.invoke({
       modelId: model.id,
       segments: [
-        { pose: 'wave', text: 'Hi' },
-        { pose: 'bow', text: 'Bye' },
+        { pose: 'idle', text: 'Hi' },
+        { pose: 'idle', text: 'Bye' },
       ],
     })
 
@@ -147,19 +150,11 @@ describe('speak_player Phase 5', () => {
       speakerId: 7,
       vrmUrl: `http://localhost:8765/vrms/${model.id}.vrm`,
       emotionBindings: [],
-      poses: [
-        { id: 'builtin:idle', name: 'idle', loop: true },
-        { id: 'builtin:neutral', name: 'neutral', loop: true },
-        { id: 'builtin:wave', name: 'wave', loop: true },
-        { id: 'builtin:bow', name: 'bow', loop: true },
-        { id: 'builtin:point', name: 'point', loop: true },
-        { id: 'builtin:think', name: 'think', loop: true },
-        { id: 'builtin:cheer', name: 'cheer', loop: true },
-      ],
+      poses: [{ id: 'builtin:idle', name: 'idle', loop: true }],
     })
     expect(structured.segments).toHaveLength(2)
-    expect(structured.segments[0]).toMatchObject({ text: 'Hi', pose: 'wave', speaker: 7 })
-    expect(structured.segments[1]).toMatchObject({ text: 'Bye', pose: 'bow', speaker: 7 })
+    expect(structured.segments[0]).toMatchObject({ text: 'Hi', pose: 'idle', speaker: 7 })
+    expect(structured.segments[1]).toMatchObject({ text: 'Bye', pose: 'idle', speaker: 7 })
   })
 
   it('modelId 未指定なら登録済みデフォルト VRM を使う', async () => {
@@ -312,13 +307,88 @@ describe('speak_player Phase 5', () => {
 
     const result = await harness.invoke({
       modelId: model.id,
-      segments: [{ text: 'no pose' }, { pose: 'wave', text: 'with pose' }],
+      segments: [{ text: 'no pose' }, { pose: 'idle', text: 'with pose' }],
     })
 
     expect(result.isError).toBeUndefined()
     const structured = result.structuredContent as { segments: Array<{ pose?: string }> }
     expect(structured.segments[0].pose).toBe('idle')
-    expect(structured.segments[1].pose).toBe('wave')
+    expect(structured.segments[1].pose).toBe('idle')
+  })
+
+  it('同じポーズ名のバリエーションは pose 名で返し、UI 用 vrmModel に全候補を含める', async () => {
+    const poseRegistry = new PoseRegistryStore({ cacheDir: TMP })
+    await poseRegistry.register({
+      id: 'wave_a',
+      loop: true,
+      vrmaBase64: SAMPLE_VRM_BASE64,
+    })
+    await poseRegistry.register({
+      id: 'wave_b',
+      loop: false,
+      vrmaBase64: SAMPLE_VRM_BASE64,
+    })
+    const model = await registry.register({
+      name: 'A',
+      speakerId: 1,
+      vrmBase64: SAMPLE_VRM_BASE64,
+      poses: [
+        { poseId: 'builtin:idle', name: 'idle' },
+        { poseId: 'wave_a', name: 'wave' },
+        { poseId: 'wave_b', name: 'wave' },
+      ],
+    })
+    const harness = buildHarness(registry, { poseRegistry })
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ pose: 'wave', text: 'variation' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      vrmModel?: { poses: Array<{ id: string; name: string; loop: boolean }> }
+      segments: Array<{ requestedPose?: string; pose?: string }>
+    }
+    expect(structured.segments[0]).toMatchObject({ requestedPose: 'wave', pose: 'wave' })
+    expect(structured.vrmModel?.poses.filter((pose) => pose.name === 'wave')).toEqual([
+      { id: 'wave_a', name: 'wave', loop: true },
+      { id: 'wave_b', name: 'wave', loop: false },
+    ])
+  })
+
+  it('poseId 指定はポーズ名として扱い、登録ポーズ名に一致しなければ fallback する', async () => {
+    const poseRegistry = new PoseRegistryStore({ cacheDir: TMP })
+    await poseRegistry.register({
+      id: 'wave_a',
+      loop: true,
+      vrmaBase64: SAMPLE_VRM_BASE64,
+    })
+    const model = await registry.register({
+      name: 'A',
+      speakerId: 1,
+      vrmBase64: SAMPLE_VRM_BASE64,
+      poses: [
+        { poseId: 'builtin:idle', name: 'idle' },
+        { poseId: 'wave_a', name: 'wave' },
+      ],
+    })
+    const harness = buildHarness(registry, { poseRegistry })
+
+    const result = await harness.invoke({
+      modelId: model.id,
+      segments: [{ pose: 'wave_a', text: 'resource id' }],
+    })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      segments: Array<{ requestedPose?: string; pose?: string; poseFallbackReason?: string }>
+    }
+    expect(structured.segments[0]).toMatchObject({
+      requestedPose: 'wave_a',
+      pose: 'idle',
+      poseFallbackReason: 'Pose not available on model: wave_a',
+    })
   })
 
   it('未登録 pose は idle fallback と理由を返す', async () => {

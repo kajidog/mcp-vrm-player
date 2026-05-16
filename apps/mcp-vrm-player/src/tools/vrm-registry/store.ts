@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { ANONYMOUS_USER_ID } from '../auth-context.js'
-import { createDefaultBuiltinAttachments } from '../pose-registry/types.js'
+import { createDefaultBuiltinAttachments, isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { extractVrmThumbnail } from './thumbnail.js'
 import type { VrmModel } from './types.js'
 
@@ -290,7 +290,14 @@ export class VrmRegistryStore {
           // バイナリが消えているエントリは無視（DB だけ残った状態を救う）
           continue
         }
-        this.registry.set(entry.id, { ...entry, ownerUserId: normalizeOwnerUserId(entry.ownerUserId) })
+        const poses = entry.poses?.filter(
+          (pose) => !pose.poseId.startsWith('builtin:') || isBuiltinPoseResourceId(pose.poseId)
+        )
+        this.registry.set(entry.id, {
+          ...entry,
+          ownerUserId: normalizeOwnerUserId(entry.ownerUserId),
+          ...(poses ? { poses } : {}),
+        })
       }
       const ownerIds = new Set([...this.registry.values()].map((entry) => entry.ownerUserId))
       for (const ownerUserId of ownerIds) this.ensureDefaultForOwner(ownerUserId)

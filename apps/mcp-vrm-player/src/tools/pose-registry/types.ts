@@ -14,7 +14,7 @@ export interface ModelPoseAttachment {
   name: string
 }
 
-export const BUILTIN_POSE_IDS = ['idle', 'neutral', 'wave', 'bow', 'point', 'think', 'cheer'] as const
+export const BUILTIN_POSE_IDS = ['idle'] as const
 export type BuiltinPoseId = (typeof BUILTIN_POSE_IDS)[number]
 
 export function toBuiltinPoseResourceId(id: BuiltinPoseId): string {

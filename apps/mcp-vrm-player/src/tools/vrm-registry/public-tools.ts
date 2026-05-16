@@ -23,7 +23,7 @@ interface PublicVrmEntry {
   vrmSizeBytes: number
   updatedAt: number
   emotionBindings?: EmotionBinding[]
-  poses: { id: string; name: string; loop: boolean }[]
+  poses: string[]
 }
 
 export function registerVrmPublicTools(
@@ -41,7 +41,7 @@ export function registerVrmPublicTools(
     {
       title: 'Start Here',
       description:
-        'Call this first before using other vrm tools. Returns engine status, registered model summary, default model, default pose names, fixed emotion names, and player settings.',
+        'Call this first before using other vrm tools. Returns engine status, registered model summary, default model, pose names, fixed emotion names, and player settings.',
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -104,7 +104,7 @@ export function registerVrmPublicTools(
     {
       title: 'Find VRM Models',
       description:
-        'Find registered VRM models and valid pose names. Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player. Per-segment gaze values are camera, away, or front.',
+        'Find registered VRM models and valid pose names. Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player. Pass pose names only. Per-segment gaze values are camera, away, or front.',
       inputSchema: {
         modelId: z.string().optional().describe('Exact VRM model ID to look up.'),
         query: z.string().optional().describe('Case-insensitive search text matched against model name or ID.'),
@@ -213,7 +213,7 @@ export function registerVrmPublicTools(
     {
       title: 'List VRMs',
       description:
-        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model poses, and emotion bindings. Pass segments[].pose as one of poses[].name, segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious, and segments[].gaze as camera/away/front. Returns metadata only (no binary).',
+        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model pose names, and emotion bindings. Pass segments[].pose as one of poses only; pose resource IDs are not accepted. Pass segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious, and segments[].gaze as camera/away/front. Returns metadata only (no binary).',
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -234,13 +234,7 @@ export function registerVrmPublicTools(
           vrmSizeBytes: model.vrmSizeBytes,
           updatedAt: model.updatedAt,
           emotionBindings: model.emotionBindings,
-          poses: (model.poses ?? []).flatMap((attachment) => {
-            if (isBuiltinPoseResourceId(attachment.poseId)) {
-              return [{ id: attachment.poseId, name: attachment.name, loop: true }]
-            }
-            const pose = poseRegistry.get(attachment.poseId)
-            return pose ? [{ id: attachment.poseId, name: attachment.name, loop: pose.loop }] : []
-          }),
+          poses: resolvePoseNames(model, poseRegistry),
         }))
         const summary =
           entries.length === 0 ? 'No VRM models registered.' : `${entries.length} VRM model(s) registered.`
@@ -274,8 +268,10 @@ function resolveVrmVisibility(playerSettings: PlayerSettingsStore | undefined, e
 }
 
 function resolvePoseNames(model: VrmModel, poseRegistry: PoseRegistryStore): string[] {
-  return (model.poses ?? []).flatMap((attachment) => {
-    if (isBuiltinPoseResourceId(attachment.poseId)) return [attachment.name]
-    return poseRegistry.get(attachment.poseId) ? [attachment.name] : []
-  })
+  const names = new Set<string>()
+  for (const attachment of model.poses ?? []) {
+    if (!isBuiltinPoseResourceId(attachment.poseId) && !poseRegistry.get(attachment.poseId)) continue
+    names.add(attachment.name)
+  }
+  return [...names]
 }

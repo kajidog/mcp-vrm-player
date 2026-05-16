@@ -79,11 +79,11 @@ TTS_ENGINE=aivisspeech TTS_BASE_URL=http://host.docker.internal:10101 docker com
 | --- | --- | --- |
 | `vrm_start_here` | （なし） | 最初に呼ぶ。エンジン状態・登録モデル概要・既定モデル・既定ポーズ名・感情名・プレイヤー設定を返す |
 | `vrm_find_models` | `modelId?`, `query?` | 登録モデルと有効なポーズ名を検索。`modelId` / `segments[].pose` を決める前に呼ぶ |
-| `vrm_list_vrms` | （なし） | 登録 VRM 一覧を返す。話者 ID・感情バインド・ポーズ・更新時刻などのメタデータ込み |
+| `vrm_list_vrms` | （なし） | 登録 VRM 一覧を返す。話者 ID・感情バインド・ポーズ名・更新時刻などのメタデータ込み |
 | `vrm_speak_player` (App tool) | `modelId?`, `segments[]` | VRM プレイヤー UI を開き、セグメント単位で発話・表情・ポーズ・視線・速度を再生 |
 | `vrm_open_model_manager` (App tool) | `modelId?`, `knowsHowToUse?` | VRM の登録 / 編集 UI を開く |
 
-`segments[]` の要素は `{ text, emotion?, pose?, gaze?, speedScale? }`。`emotion` は `neutral` / `happy` / `angry` / `sad` / `relaxed` / `surprised` / `serious`、`gaze` は `camera`（視線を合わせる） / `away`（そらす） / `front`（正面）。
+`segments[]` の要素は `{ text, emotion?, pose?, gaze?, speedScale? }`。`pose` は `vrm_find_models` / `vrm_list_vrms` で返るポーズ名を指定します。`emotion` は `neutral` / `happy` / `angry` / `sad` / `relaxed` / `surprised` / `serious`、`gaze` は `camera`（視線を合わせる） / `away`（そらす） / `front`（正面）。
 
 ## 起動オプション
 

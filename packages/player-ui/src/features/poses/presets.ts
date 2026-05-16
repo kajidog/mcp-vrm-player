@@ -44,15 +44,11 @@ function setRot(vrm: VRM, name: VRMHumanBoneName, x: number, y: number, z: numbe
 // 自然な腕下げ角度（T-pose から肩を下方向に倒す）。VRM 1.0 正規化ボーンでは Z 回転で arms-down になる。
 const ARM_DOWN_Z = Math.PI / 2.6
 
-function applyNeutral(vrm: VRM, _t: number): void {
+function applyIdle(vrm: VRM, t: number): void {
   resetBones(vrm)
   // 腕を体側へ降ろす（A-pose 寄り）。
   setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0, 0, ARM_DOWN_Z)
   setRot(vrm, VRMHumanBoneName.RightUpperArm, 0, 0, -ARM_DOWN_Z)
-}
-
-function applyIdle(vrm: VRM, t: number): void {
-  applyNeutral(vrm, t)
   // 呼吸：胸を ±2.5 度の sin で揺らす。0.6 Hz 程度（period ≈ 1.6 s）。
   const breath = Math.sin(t * Math.PI * 1.2) * 0.04
   const sway = Math.sin(t * Math.PI * 0.5) * 0.015
@@ -60,72 +56,6 @@ function applyIdle(vrm: VRM, t: number): void {
   setRot(vrm, VRMHumanBoneName.Spine, breath * 0.5, sway, 0)
   // 頭の小さなノイズ（覗き込みすぎないよう微小）。
   setRot(vrm, VRMHumanBoneName.Head, 0, sway * 0.6, 0)
-}
-
-function applyWave(vrm: VRM, t: number): void {
-  resetBones(vrm)
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0, 0, ARM_DOWN_Z)
-  // 右腕を持ち上げる。neutral では Z=-ARM_DOWN_Z で腕が下がるので、+Z に振って上げる。
-  // 顔の横あたりで手のひらを見せる角度。
-  setRot(vrm, VRMHumanBoneName.RightUpperArm, 0, 0, Math.PI * 0.45)
-  // 肘を少し曲げて手を頭の横へ。
-  setRot(vrm, VRMHumanBoneName.RightLowerArm, 0, -0.5, 0)
-  // 手首を左右に揺らして「振る」動作。
-  const swing = Math.sin(t * Math.PI * 3) * 0.5
-  setRot(vrm, VRMHumanBoneName.RightHand, 0, 0, swing)
-}
-
-function applyBow(vrm: VRM, _t: number): void {
-  resetBones(vrm)
-  // 上半身を前に倒す。X- が前方向のお辞儀（X+ は背反らし）。spine + chest で分割。
-  setRot(vrm, VRMHumanBoneName.Spine, -0.35, 0, 0)
-  setRot(vrm, VRMHumanBoneName.Chest, -0.15, 0, 0)
-  // 頭は逆方向に少し戻して顎を引く感じ。
-  setRot(vrm, VRMHumanBoneName.Head, 0.1, 0, 0)
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0, 0, ARM_DOWN_Z * 0.85)
-  setRot(vrm, VRMHumanBoneName.RightUpperArm, 0, 0, -ARM_DOWN_Z * 0.85)
-}
-
-function applyPoint(vrm: VRM, _t: number): void {
-  resetBones(vrm)
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0, 0, ARM_DOWN_Z)
-  // 右腕を前方水平へ：X+ で前方向に肩を倒し、Z で水平に保つ。
-  setRot(vrm, VRMHumanBoneName.RightUpperArm, Math.PI * 0.4, 0, -Math.PI * 0.45)
-  setRot(vrm, VRMHumanBoneName.RightLowerArm, 0, -0.2, 0)
-}
-
-function applyThink(vrm: VRM, t: number): void {
-  resetBones(vrm)
-  setRot(vrm, VRMHumanBoneName.RightShoulder, 0.508, -0.262, 0.058)
-  setRot(vrm, VRMHumanBoneName.RightUpperArm, -0.082, 0.688, -1.102)
-  setRot(vrm, VRMHumanBoneName.RightLowerArm, -0.342, 2.288, 0.318)
-  setRot(vrm, VRMHumanBoneName.RightHand, 0.838, 0.198, -0.722)
-
-  setRot(vrm, VRMHumanBoneName.LeftShoulder, 0.228, 0.128, 0.128)
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0.428, 0.908, ARM_DOWN_Z)
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0.428, 0.908, 0.818)
-  setRot(vrm, VRMHumanBoneName.LeftLowerArm, -0.122, 0.418, 1.608)
-  setRot(vrm, VRMHumanBoneName.LeftHand, -1.182, 0.378, 0.878)
-
-  // 軽く首を前&横に傾げる（X- が前傾）。微小揺らぎで生っぽくする。
-  const tilt = 0.1 + Math.sin(t * Math.PI * 0.6) * 0.03
-  setRot(vrm, VRMHumanBoneName.Neck, 0.048, -0.272, tilt)
-  setRot(vrm, VRMHumanBoneName.Head, -0.152, 0.178, tilt)
-  setRot(vrm, VRMHumanBoneName.Chest, 0, 0.168, 0.078)
-  setRot(vrm, VRMHumanBoneName.Spine, 0, 0, -0.022)
-}
-
-function applyCheer(vrm: VRM, t: number): void {
-  resetBones(vrm)
-  // 両腕を万歳。小さく上下に揺らす。
-  const bounce = Math.sin(t * Math.PI * 4) * 0.08
-  setRot(vrm, VRMHumanBoneName.LeftUpperArm, 0, 0, Math.PI * 0.3 + bounce)
-  setRot(vrm, VRMHumanBoneName.RightUpperArm, 0, 0, -Math.PI * 0.3 - bounce)
-  setRot(vrm, VRMHumanBoneName.LeftLowerArm, 0, 0.2, 0)
-  setRot(vrm, VRMHumanBoneName.RightLowerArm, 0, -0.2, 0)
-  const tilt = 0.1 + Math.sin(t * Math.PI * 0.6) * 0.03
-  setRot(vrm, VRMHumanBoneName.Neck, 0.048, -0.272, tilt)
-  setRot(vrm, VRMHumanBoneName.Head, -0.152, 0.178, tilt)
 }
 
 export interface PosePreset {
@@ -136,12 +66,6 @@ export interface PosePreset {
 
 export const POSE_PRESETS = {
   idle: { kind: 'preset', label: '待機', applyToVrm: applyIdle },
-  neutral: { kind: 'preset', label: 'ニュートラル', applyToVrm: applyNeutral },
-  wave: { kind: 'preset', label: '手を振る', applyToVrm: applyWave },
-  bow: { kind: 'preset', label: 'お辞儀', applyToVrm: applyBow },
-  point: { kind: 'preset', label: '指差し', applyToVrm: applyPoint },
-  think: { kind: 'preset', label: '考え中', applyToVrm: applyThink },
-  cheer: { kind: 'preset', label: '喜び', applyToVrm: applyCheer },
 } as const satisfies Record<string, PosePreset>
 
 export type PosePresetId = keyof typeof POSE_PRESETS
