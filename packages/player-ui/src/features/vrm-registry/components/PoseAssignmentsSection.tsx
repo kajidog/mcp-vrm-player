@@ -1,3 +1,4 @@
+import type { App } from '@modelcontextprotocol/ext-apps'
 import { DeleteIcon } from '~/icons'
 import { PoseRegisterModal } from '../../poses/PoseRegisterModal'
 import type { RegisterPoseRequest } from '../../poses/hooks/usePoseRegistry'
@@ -15,6 +16,7 @@ interface PoseGroup {
 }
 
 interface PoseAssignmentsSectionProps {
+  app: App | null
   poseFormOpen: boolean
   saving: boolean
   poseSectionDisabled: boolean
@@ -33,6 +35,7 @@ interface PoseAssignmentsSectionProps {
 }
 
 export function PoseAssignmentsSection({
+  app,
   poseFormOpen,
   saving,
   poseSectionDisabled,
@@ -68,6 +71,7 @@ export function PoseAssignmentsSection({
 
       {poseFormOpen ? (
         <PoseRegisterModal
+          app={app}
           existingIds={availablePoses.map((pose) => pose.id)}
           saving={saving}
           previewSource={previewSource}

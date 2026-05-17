@@ -56,6 +56,19 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
         autoPlay: z.boolean().nullable().optional(),
         usePublicVrms: z.boolean().nullable().optional(),
         activeModelId: z.string().nullable().optional(),
+        renderSettings: z
+          .object({
+            dprMax: z.number().optional(),
+            sceneLightIntensity: z.number().optional(),
+            blinkEnabled: z.boolean().optional(),
+            lookAtCamera: z.boolean().optional(),
+            headTrackCamera: z.boolean().optional(),
+            poseEasing: z.enum(['linear', 'easeInOutQuad']).optional(),
+            expressionTransitionMs: z.number().optional(),
+            moraTimingOffsetMs: z.number().optional(),
+          })
+          .nullable()
+          .optional(),
         reset: z.boolean().optional(),
       },
       _meta: {
@@ -70,6 +83,16 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
         autoPlay?: boolean | null
         usePublicVrms?: boolean | null
         activeModelId?: string | null
+        renderSettings?: {
+          dprMax?: number
+          sceneLightIntensity?: number
+          blinkEnabled?: boolean
+          lookAtCamera?: boolean
+          headTrackCamera?: boolean
+          poseEasing?: 'linear' | 'easeInOutQuad'
+          expressionTransitionMs?: number
+          moraTimingOffsetMs?: number
+        } | null
         reset?: boolean
       },
       extra: ToolHandlerExtra
@@ -86,6 +109,7 @@ export function registerPlayerSettingsTools(context: PlayerUIToolContext): void 
                 autoPlay: input.autoPlay,
                 usePublicVrms: input.usePublicVrms,
                 activeModelId: input.activeModelId,
+                renderSettings: input.renderSettings,
               },
               userId
             )

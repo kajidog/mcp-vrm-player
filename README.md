@@ -17,11 +17,14 @@
 
 ## MCP Apps
 
+![alt text](./docs/img/default.png)
+
 [ChatGPT](https://chatgpt.com) / [Claude](https://claude.ai) など MCP Apps 対応クライアントの会話画面内に、3D VRM プレイヤーが描画されます。
 
 - ネイティブアプリのインストールは不要。スマートフォンのブラウザでも動作します
 - チャットから VRM を呼び出して発話させたり、モデル管理画面でモデル登録・ポーズ追加・話者プレビューが行えます
 - `vrm_speak_player` / `vrm_open_model_manager` は MCP Apps UI を開けるクライアントから利用してください
+
 
 ## クイックスタート
 

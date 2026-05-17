@@ -1,3 +1,4 @@
+import type { App } from '@modelcontextprotocol/ext-apps'
 import type { PoseSource } from '~/features/poses/types'
 import { VRMCanvas } from '../../vrm-player/components/VRMCanvas'
 import type { MouthRef } from '../../vrm-player/hooks/useLipSync'
@@ -5,6 +6,7 @@ import type { VrmSource } from '../../vrm-player/types'
 import type { SpeakerStyle } from '../hooks/useSpeakers'
 
 interface VrmPreviewPanelProps {
+  app: App | null
   source: VrmSource | null
   isEdit: boolean
   fullscreen: boolean
@@ -29,6 +31,7 @@ interface VrmPreviewPanelProps {
 }
 
 export function VrmPreviewPanel({
+  app,
   source,
   isEdit,
   fullscreen,
@@ -126,6 +129,7 @@ export function VrmPreviewPanel({
 
       {source ? (
         <VRMCanvas
+          app={app}
           source={source}
           onError={onError}
           pose={previewPose}

@@ -252,44 +252,21 @@ body {
   }
 }
 
-.render-settings-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  pointer-events: none;
-}
-
-.render-settings-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgb(0 0 0 / 0.18);
-  backdrop-filter: blur(1px);
-  pointer-events: auto;
-  animation: vv-render-backdrop-in 0.16s ease-out both;
-}
-
 .render-settings-drawer {
   position: absolute;
-  inset-block: 0;
-  right: 0;
+  top: 12px;
+  bottom: 12px;
+  right: 12px;
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  width: min(20rem, 100%);
+  width: min(18rem, 70%);
   background: var(--ui-bg);
-  border-left: 1px solid var(--ui-border);
-  box-shadow: -10px 0 32px rgb(0 0 0 / 0.18);
-  pointer-events: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.08);
   animation: vv-render-drawer-in 0.18s ease-out both;
-}
-
-@keyframes vv-render-backdrop-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
 }
 
 @keyframes vv-render-drawer-in {

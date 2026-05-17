@@ -18,6 +18,7 @@ export interface PoseMetadata {
   sizeBytes: number
   vrmaUrl?: string
   builtin?: boolean
+  canEdit?: boolean
   createdAt?: number
   updatedAt?: number
 }
@@ -29,6 +30,7 @@ export function builtinPoseMetadata(): PoseMetadata[] {
     loop: true,
     sizeBytes: 0,
     builtin: true,
+    canEdit: false,
   }))
 }
 
@@ -43,6 +45,7 @@ export function toPoseMetadata(
     loop: pose.loop,
     sizeBytes: pose.vrmaSizeBytes,
     vrmaUrl: getPoseVrmaUrl(config, pose.id, { userId }),
+    canEdit: userId === undefined || pose.ownerUserId === userId,
     createdAt: pose.createdAt,
     updatedAt: pose.updatedAt,
   }
@@ -74,9 +77,12 @@ export function registerPoseRegistryTools(
     async (_args: Record<string, never>, extra: ToolHandlerExtra): Promise<CallToolResult> => {
       try {
         const userId = resolveUserId(extra)
+        const settings = shared.playerSettings.applyDefaults({}, userId)
         const poses = [
           ...builtinPoseMetadata(),
-          ...poseRegistry.listOwned(userId).map((pose) => toPoseMetadata(config, pose, userId)),
+          ...listReadableCustomPoses(poseRegistry, vrmRegistry, userId, settings.usePublicVrms).map((pose) =>
+            toPoseMetadata(config, pose, userId)
+          ),
         ]
         return { content: [{ type: 'text', text: JSON.stringify({ poses }) }] }
       } catch (error) {
@@ -215,4 +221,25 @@ function getReadablePose(
     .listVisible({ userId, usePublicVrms })
     .some((model) => model.isPublic && model.poses?.some((attachment) => attachment.poseId === poseId))
   return referencedByPublicVrm ? pose : undefined
+}
+
+function listReadableCustomPoses(
+  poseRegistry: PoseRegistryStore,
+  vrmRegistry: VrmRegistryStore,
+  userId: string,
+  usePublicVrms: boolean
+): PoseResource[] {
+  const poses = new Map<string, PoseResource>()
+  for (const pose of poseRegistry.listOwned(userId)) poses.set(pose.id, pose)
+  if (!usePublicVrms) return [...poses.values()]
+
+  for (const model of vrmRegistry.listVisible({ userId, usePublicVrms })) {
+    if (!model.isPublic || model.ownerUserId === userId) continue
+    for (const attachment of model.poses ?? []) {
+      if (isBuiltinPoseResourceId(attachment.poseId)) continue
+      const pose = poseRegistry.get(attachment.poseId)
+      if (pose) poses.set(pose.id, pose)
+    }
+  }
+  return [...poses.values()]
 }

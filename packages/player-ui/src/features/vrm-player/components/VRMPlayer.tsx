@@ -33,7 +33,11 @@ interface VRMPlayerProps {
   onPause: () => void
   onPrev: () => void
   onNext: () => void
-  onOpenSettings: () => void
+  renderPanelOpen: boolean
+  onOpenRenderPanel: () => void
+  onCloseRenderPanel: () => void
+  onOpenServerSettings: () => void
+  onOpenPoses: () => void
   onAddModel: () => void
   onEditModel: (modelId: string) => void
   onToggleFullscreen: () => void
@@ -67,7 +71,11 @@ export function VRMPlayer({
   onPause,
   onPrev,
   onNext,
-  onOpenSettings,
+  renderPanelOpen,
+  onOpenRenderPanel,
+  onCloseRenderPanel,
+  onOpenServerSettings,
+  onOpenPoses,
   onAddModel,
   onEditModel,
   onToggleFullscreen,
@@ -97,11 +105,11 @@ export function VRMPlayer({
         onPause={onPause}
         onPrev={onPrev}
         onNext={onNext}
-        onOpenSettings={onOpenSettings}
         onToggleFullscreen={onToggleFullscreen}
       />
       <div className={fullscreen ? 'min-h-0 flex-1' : undefined}>
         <VRMCanvas
+          app={app}
           source={source}
           onError={onModelError}
           pose={pose}
@@ -117,6 +125,11 @@ export function VRMPlayer({
           onNext={onNext}
           onLoadStart={onVrmLoadStart}
           onLoaded={onVrmLoaded}
+          renderPanelOpen={renderPanelOpen}
+          onOpenRenderPanel={onOpenRenderPanel}
+          onCloseRenderPanel={onCloseRenderPanel}
+          onOpenServerSettings={onOpenServerSettings}
+          onOpenPoses={onOpenPoses}
         />
       </div>
     </div>

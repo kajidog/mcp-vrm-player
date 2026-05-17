@@ -13,6 +13,7 @@ export interface PoseMetadata {
   sizeBytes: number
   vrmaUrl?: string
   builtin?: boolean
+  canEdit?: boolean
   createdAt?: number
   updatedAt?: number
 }

@@ -270,6 +270,18 @@ export interface PlayerSettings {
   autoPlay?: boolean
   usePublicVrms?: boolean
   activeModelId?: string
+  renderSettings?: PlayerRenderSettings
+}
+
+export interface PlayerRenderSettings {
+  dprMax?: number
+  sceneLightIntensity?: number
+  blinkEnabled?: boolean
+  lookAtCamera?: boolean
+  headTrackCamera?: boolean
+  poseEasing?: 'linear' | 'easeInOutQuad'
+  expressionTransitionMs?: number
+  moraTimingOffsetMs?: number
 }
 
 export interface PlayerSettingsResponse {

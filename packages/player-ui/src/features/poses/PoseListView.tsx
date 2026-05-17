@@ -90,6 +90,7 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
 
       {formOpen ? (
         <PoseRegisterModal
+          app={app}
           existingIds={poses.map((pose) => pose.id)}
           onClose={() => setFormOpen(false)}
           onRegister={register}
@@ -105,6 +106,7 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
           <div className="space-y-1">
             {poses.map((pose) => {
               const builtin = isBuiltinPoseResourceId(pose.id)
+              const canEdit = !builtin && pose.canEdit !== false
               const edit = editing[pose.id] ?? { name: pose.name ?? '', loop: pose.loop }
               return (
                 <div
@@ -122,7 +124,7 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
                     </span>
                     <span className="text-[var(--ui-text-secondary)]">{formatBytes(pose.sizeBytes)}</span>
                   </button>
-                  {!builtin ? (
+                  {canEdit ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         value={edit.name}
@@ -168,7 +170,13 @@ export function PoseListView({ app, onBack }: PoseListViewProps) {
           <div className="mb-2 text-xs font-semibold text-[var(--ui-text)]">プレビュー</div>
           {previewError ? <div className="mb-2 text-xs text-red-600">{previewError}</div> : null}
           {previewSource && selectedPose ? (
-            <VRMCanvas source={previewSource} onError={setPreviewError} pose={selectedPose} speechText={null} />
+            <VRMCanvas
+              app={app}
+              source={previewSource}
+              onError={setPreviewError}
+              pose={selectedPose}
+              speechText={null}
+            />
           ) : (
             <div className="rounded-md border border-dashed border-[var(--ui-border)] p-6 text-center text-xs text-[var(--ui-text-secondary)]">
               デフォルト VRM がありません。

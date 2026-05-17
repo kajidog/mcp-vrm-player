@@ -1,3 +1,4 @@
+import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useMemo, useState } from 'react'
 import { VRMCanvas } from '../vrm-player/components/VRMCanvas'
 import type { VrmSource } from '../vrm-player/types'
@@ -6,6 +7,7 @@ import { isBuiltinPoseResourceId } from './presets'
 import type { PoseMetadata, PoseSource } from './types'
 
 interface PoseRegisterModalProps {
+  app?: App | null
   existingIds: string[]
   saving?: boolean
   // 親で表示中の VRM。未指定（VRM 未選択時）はプレビュー枠に注意書きを出す。
@@ -34,6 +36,7 @@ function idFromFileName(fileName: string): string {
 }
 
 export function PoseRegisterModal({
+  app = null,
   existingIds,
   saving = false,
   previewSource = null,
@@ -194,6 +197,7 @@ export function PoseRegisterModal({
                 }`}
               >
                 <VRMCanvas
+                  app={app}
                   source={previewSource}
                   onError={setPreviewError}
                   pose={previewPose}

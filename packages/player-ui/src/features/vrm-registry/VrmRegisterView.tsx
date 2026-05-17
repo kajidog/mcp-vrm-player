@@ -335,7 +335,8 @@ export function VrmRegisterView({
   const dragHighlight = drop.isDragging
   const previewPose = poseLibrary.get(previewPoseId) ?? poseLibrary.get(`builtin:${DEFAULT_POSE_ID}`) ?? null
   const previewExpression = previewExpressionName ? { name: previewExpressionName, weight: 1 } : null
-  const firstPoseId = availablePoses[0]?.id ?? `builtin:${DEFAULT_POSE_ID}`
+  const attachablePoses = availablePoses.filter((pose) => pose.builtin || pose.canEdit !== false)
+  const firstPoseId = attachablePoses[0]?.id ?? `builtin:${DEFAULT_POSE_ID}`
   const poseSectionDisabled = !isEdit && !vrmBuffer
   const expressionOptions = useMemo(
     () =>
@@ -484,6 +485,7 @@ export function VrmRegisterView({
       ) : null}
 
       <VrmPreviewPanel
+        app={app}
         source={previewSource}
         isEdit={isEdit}
         fullscreen={fullscreen}
@@ -574,11 +576,12 @@ export function VrmRegisterView({
         onToggle={() => setOpenSections((prev) => ({ ...prev, pose: !prev.pose }))}
       >
         <PoseAssignmentsSection
+          app={app}
           poseFormOpen={poseFormOpen}
           saving={saving}
           poseSectionDisabled={poseSectionDisabled}
           previewSource={previewSource}
-          availablePoses={availablePoses}
+          availablePoses={attachablePoses}
           poseGroups={poseGroups}
           groupNameRefs={groupNameRefs}
           onPoseFormOpenChange={setPoseFormOpen}

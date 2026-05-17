@@ -1,7 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useState } from 'react'
 import { PoseListView } from './features/poses/PoseListView'
-import { RenderSettingsPanel } from './features/vrm-player/components/RenderSettingsPanel'
 import { SettingsView } from './features/vrm-player/components/SettingsView'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
 import { useDisplayMode } from './features/vrm-player/hooks/useDisplayMode'
@@ -65,6 +64,7 @@ function LoadingView({ label }: { label: string }) {
 }
 
 function loadingLabel(phase: VrmPlayerLoadingPhase): string {
+  if (phase === 'waitingTool') return 'ツール呼び出し中'
   if (phase === 'loadingVrm' || phase === 'resolvingModel') return 'VRMロード中'
   if (phase === 'preparingAudio') return '音声準備中'
   return 'ローディング中'
@@ -178,8 +178,8 @@ export function McpApp() {
         busy={player.loadingModel}
         onBack={() => setView('player')}
         onOpenPoses={() => setView('poses')}
-        onApplied={async () => {
-          await player.resynthesizeAll()
+        onApplied={async (settings) => {
+          await player.resynthesizeAll(settings)
           setView('player')
         }}
       />
@@ -230,7 +230,17 @@ export function McpApp() {
           onModelError={player.setModelError}
           onVrmLoadStart={player.notifyVrmLoadStart}
           onVrmLoaded={player.notifyVrmLoaded}
-          onOpenSettings={() => setRenderPanelOpen(true)}
+          renderPanelOpen={renderPanelOpen}
+          onOpenRenderPanel={() => setRenderPanelOpen(true)}
+          onCloseRenderPanel={() => setRenderPanelOpen(false)}
+          onOpenServerSettings={() => {
+            setRenderPanelOpen(false)
+            setView('settings')
+          }}
+          onOpenPoses={() => {
+            setRenderPanelOpen(false)
+            setView('poses')
+          }}
           onAddModel={() => {
             setEditingModelId(null)
             setView('register')
@@ -247,19 +257,6 @@ export function McpApp() {
       </div>
       {showErrorStatus ? <ErrorStatus message={player.errorMsg} /> : null}
       {preparing ? <LoadingOverlay phase={player.loadingPhase} progress={player.loadingProgress} /> : null}
-      {renderPanelOpen ? (
-        <RenderSettingsPanel
-          onClose={() => setRenderPanelOpen(false)}
-          onOpenServerSettings={() => {
-            setRenderPanelOpen(false)
-            setView('settings')
-          }}
-          onOpenPoses={() => {
-            setRenderPanelOpen(false)
-            setView('poses')
-          }}
-        />
-      ) : null}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
-import { FullscreenExitIcon, FullscreenIcon, SettingsIcon } from '~/icons'
+import { FullscreenExitIcon, FullscreenIcon } from '~/icons'
 import { ModelStrip } from './ModelStrip'
 import { TransportBar } from './TransportBar'
 
@@ -24,7 +24,6 @@ interface PlayerHeaderProps {
   onPause: () => void
   onPrev: () => void
   onNext: () => void
-  onOpenSettings: () => void
   onToggleFullscreen: () => void
 }
 
@@ -49,7 +48,6 @@ export function PlayerHeader({
   onPause,
   onPrev,
   onNext,
-  onOpenSettings,
   onToggleFullscreen,
 }: PlayerHeaderProps) {
   return (
@@ -78,14 +76,6 @@ export function PlayerHeader({
       />
       <div className="flex shrink-0 items-center gap-1">
         {loadingModel ? <div className="vv-spinner-sm" /> : null}
-        <button
-          type="button"
-          title="Settings"
-          onClick={onOpenSettings}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
-        >
-          <SettingsIcon />
-        </button>
         {canFullscreen ? (
           <button
             type="button"

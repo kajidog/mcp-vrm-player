@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import type { VrmPlayerState } from '../types'
 
-export function usePlayerLoadingState() {
+export function usePlayerLoadingState({ canCompleteVrmLoad }: { canCompleteVrmLoad?: () => boolean } = {}) {
   const [loadingPhase, setLoadingPhase] = useState<VrmPlayerState['loadingPhase']>('idle')
   const [loadingProgress, setLoadingProgress] = useState(0)
   const loadingPhaseRef = useRef<VrmPlayerState['loadingPhase']>('idle')
@@ -23,10 +23,10 @@ export function usePlayerLoadingState() {
 
   const notifyVrmLoaded = useCallback(() => {
     const phase = loadingPhaseRef.current
-    if (phase === 'loadingVrm' || phase === 'resolvingModel' || phase === 'waitingTool') {
+    if ((phase === 'loadingVrm' || phase === 'resolvingModel') && canCompleteVrmLoad?.() !== false) {
       setLoadingState('ready', 100)
     }
-  }, [setLoadingState])
+  }, [canCompleteVrmLoad, setLoadingState])
 
   return {
     loadingPhase,

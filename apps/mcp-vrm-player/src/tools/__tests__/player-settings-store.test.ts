@@ -29,7 +29,21 @@ describe('PlayerSettingsStore', () => {
   it('設定はユーザーごとに保存される', async () => {
     const store = createStore()
 
-    store.set({ speedScale: 1.2, usePublicVrms: false, activeModelId: 'model-a' }, 'user-a')
+    store.set(
+      {
+        speedScale: 1.2,
+        usePublicVrms: false,
+        activeModelId: 'model-a',
+        renderSettings: {
+          dprMax: 2,
+          sceneLightIntensity: 1.25,
+          blinkEnabled: false,
+          poseEasing: 'linear',
+          moraTimingOffsetMs: 30,
+        },
+      },
+      'user-a'
+    )
     store.set({ autoPlay: false }, 'user-b')
 
     expect(store.applyDefaults({}, 'user-a')).toMatchObject({
@@ -47,6 +61,40 @@ describe('PlayerSettingsStore', () => {
     const reloaded = createStore()
     expect(reloaded.applyDefaults({}, 'user-a').usePublicVrms).toBe(false)
     expect(reloaded.get('user-a').activeModelId).toBe('model-a')
+    expect(reloaded.get('user-a').renderSettings).toMatchObject({
+      dprMax: 2,
+      sceneLightIntensity: 1.25,
+      blinkEnabled: false,
+      poseEasing: 'linear',
+      moraTimingOffsetMs: 30,
+    })
+    expect(reloaded.get('user-b').renderSettings).toBeUndefined()
     expect(reloaded.applyDefaults({}, 'user-b').autoPlay).toBe(false)
+  })
+
+  it('未指定フィールドは既存の表示設定を消さない', () => {
+    const store = createStore()
+
+    store.set(
+      {
+        renderSettings: {
+          dprMax: 2,
+          sceneLightIntensity: 1.4,
+          headTrackCamera: true,
+        },
+      },
+      'user-a'
+    )
+
+    store.set({ activeModelId: 'model-b' }, 'user-a')
+
+    expect(store.get('user-a')).toMatchObject({
+      activeModelId: 'model-b',
+      renderSettings: {
+        dprMax: 2,
+        sceneLightIntensity: 1.4,
+        headTrackCamera: true,
+      },
+    })
   })
 })

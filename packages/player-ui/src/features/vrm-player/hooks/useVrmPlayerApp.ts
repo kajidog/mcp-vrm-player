@@ -32,6 +32,7 @@ import { usePlayerLoadingState } from './usePlayerLoadingState'
 import { useRenderSettings } from './useRenderSettings'
 import { useRevokableObjectUrl } from './useRevokableObjectUrl'
 import { useSegmentPlayback } from './useSegmentPlayback'
+import type { PlayerSettings } from './vrmPlayerToolClient'
 import {
   fetchDefaultVrmOnServer,
   fetchSpeakerIconOnServer,
@@ -62,8 +63,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const [errorMsg, setErrorMsg] = useState('')
   const [source, setSource] = useState<VrmPlayerState['source']>(null)
   const [loadingModel, setLoadingModel] = useState(false)
-  const { loadingPhase, loadingProgress, setLoadingState, notifyVrmLoadStart, notifyVrmLoaded } =
-    usePlayerLoadingState()
+  // ツール呼び出しで開かれた App は、引数生成中から結果到着まで待機表示を維持する。
+  // VRM の先読み完了だけで `ready` に戻ると、呼び出し中にプレイヤーが見えてしまう。
+  const toolResultPendingRef = useRef(false)
+  const { loadingPhase, loadingProgress, setLoadingState, notifyVrmLoadStart, notifyVrmLoaded } = usePlayerLoadingState(
+    { canCompleteVrmLoad: () => !toolResultPendingRef.current }
+  )
   const [activeModel, setActiveModel] = useState<VrmPlayerState['activeModel']>(null)
   const [speakerIconUrl, setSpeakerIconUrl] = useState<string | undefined>(undefined)
   const [modelManagerRequest, setModelManagerRequest] = useState<VrmPlayerState['modelManagerRequest']>(null)
@@ -77,7 +82,6 @@ export function useVrmPlayerApp(): VrmPlayerState {
   // リップシンク制御。AudioContext は audio 生成の useEffect で attach し、
   // セグメント切替で setSegment を呼ぶ。mouthRef を VrmPlayerState に流して VRMScene で参照する。
   const lipSync = useLipSync()
-  const { settings: renderSettings } = useRenderSettings()
   // ホストからツール入力 / 結果を一度でも受け取ったかどうか。
   // 受け取った後に初期デフォルトの非同期適用が遅れて返ってきても上書きしないためのガード。
   const toolInteractedRef = useRef(false)
@@ -149,10 +153,6 @@ export function useVrmPlayerApp(): VrmPlayerState {
   useEffect(() => {
     cleanupPlayedKeys()
   }, [])
-
-  useEffect(() => {
-    lipSync.setMoraTimingOffsetMs(renderSettings.moraTimingOffsetMs)
-  }, [lipSync, renderSettings.moraTimingOffsetMs])
 
   const setResolvedSource = (nextSource: VrmPlayerState['source']) => {
     sourceRef.current = nextSource
@@ -330,6 +330,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
       // ホストがツールを呼び始めた段階。引数から先行プレビューできるか試す。
       createdApp.ontoolinput = async (params) => {
         toolInteractedRef.current = true
+        toolResultPendingRef.current = true
         setStatus('waiting')
         setLoadingModel(true)
         setLoadingState('waitingTool', 10)
@@ -348,9 +349,18 @@ export function useVrmPlayerApp(): VrmPlayerState {
         }
       }
 
+      createdApp.ontoolinputpartial = () => {
+        toolInteractedRef.current = true
+        toolResultPendingRef.current = true
+        setStatus('waiting')
+        setLoadingModel(true)
+        setLoadingState('waitingTool', 10)
+      }
+
       // ツール結果到着。エラーなら即エラー表示、それ以外はペイロードを解決する。
       createdApp.ontoolresult = async (result: CallToolResult) => {
         toolInteractedRef.current = true
+        toolResultPendingRef.current = false
         if (result.isError) {
           playback.clearSegments()
           setStatus('error')
@@ -470,6 +480,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
       }
 
       createdApp.ontoolcancelled = () => {
+        toolResultPendingRef.current = false
         setStatus('waiting')
         setLoadingState('waitingTool', 20)
       }
@@ -487,6 +498,11 @@ export function useVrmPlayerApp(): VrmPlayerState {
       }
     },
   })
+  const { settings: renderSettings } = useRenderSettings(app ?? null)
+
+  useEffect(() => {
+    lipSync.setMoraTimingOffsetMs(renderSettings.moraTimingOffsetMs)
+  }, [lipSync, renderSettings.moraTimingOffsetMs])
 
   const { poseLibrary } = usePoseRegistry(app ?? null)
 
@@ -497,14 +513,21 @@ export function useVrmPlayerApp(): VrmPlayerState {
   }, [poseLibrary, playback.currentSegmentIndex])
 
   // App ハンドルが確立した直後は「ツール入力待ち」へ遷移させる。
-  // 加えて、まだツール入出力が無いうちにデフォルト VRM をプリロードして
-  // モデルピッカーに「現在のモデル」が見える状態を作る（指定なしで開かれた時の初期表示）。
+  // ツール呼び出しから開かれた場合は、引数生成中も待機表示を維持する。
+  // 直接開かれた場合だけデフォルト VRM をプリロードして、モデルピッカーに
+  // 「現在のモデル」が見える状態を作る（指定なしで開かれた時の初期表示）。
   // biome-ignore lint/correctness/useExhaustiveDependencies: applyDefaultPayload は ref ベースのクロージャで安定
   useEffect(() => {
     if (!app) return
-    setStatus('waiting')
-    setLoadingState('waitingTool', 0)
     if (toolInteractedRef.current) return
+    const invokedByTool = Boolean(app.getHostContext()?.toolInfo)
+    setStatus('waiting')
+    setLoadingState('waitingTool', invokedByTool ? 5 : 0)
+    if (invokedByTool) {
+      toolResultPendingRef.current = true
+      setLoadingModel(true)
+      return
+    }
     setLoadingModel(true)
     void applyDefaultPayload('プレイヤー初期化時のデフォルト VRM 読み込み', () => toolInteractedRef.current).finally(
       () => setLoadingModel(false)
@@ -522,7 +545,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     currentApp: App,
     model: NonNullable<VrmPlayerState['activeModel']> | null,
     list: PoseSegment[],
-    options: { preferSegmentSpeaker?: boolean } = {}
+    options: { preferSegmentSpeaker?: boolean; settings?: PlayerSettings } = {}
   ): Promise<PoseSegment[]> => {
     return Promise.all(
       list.map(async (segment, index) => {
@@ -536,9 +559,9 @@ export function useVrmPlayerApp(): VrmPlayerState {
           const result = await resynthesizeSegmentOnServer(currentApp, {
             speakerId: resolvedSpeakerId,
             text: segment.text,
-            speedScale: segment.explicitSpeedScale,
-            prePhonemeLength: segment.prePhonemeLength,
-            postPhonemeLength: segment.postPhonemeLength,
+            speedScale: segment.explicitSpeedScale ?? options.settings?.speedScale,
+            prePhonemeLength: options.settings ? options.settings.prePhonemeLength : segment.prePhonemeLength,
+            postPhonemeLength: options.settings ? options.settings.postPhonemeLength : segment.postPhonemeLength,
           })
           return {
             ...segment,
@@ -559,7 +582,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     )
   }
 
-  const resynthesizeAll = async (): Promise<void> => {
+  const resynthesizeAll = async (settings?: PlayerSettings): Promise<void> => {
     const currentApp = appRef.current
     const model = activeModel
     const existing = playback.segmentsRef.current
@@ -568,7 +591,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     setLoadingModel(true)
     setLoadingState('preparingAudio', 65)
     try {
-      playback.startPlayback(await resynthesizeSegments(currentApp, model, existing))
+      playback.startPlayback(await resynthesizeSegments(currentApp, model, existing, { settings }))
       setLoadingState('ready', 100)
     } finally {
       setLoadingModel(false)

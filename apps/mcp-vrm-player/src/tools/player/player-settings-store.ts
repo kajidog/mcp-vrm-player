@@ -6,6 +6,17 @@ import { ANONYMOUS_USER_ID } from '../auth-context.js'
 
 const SETTINGS_FILE_NAME = 'player-settings.json'
 
+export interface PlayerRenderSettings {
+  dprMax?: number
+  sceneLightIntensity?: number
+  blinkEnabled?: boolean
+  lookAtCamera?: boolean
+  headTrackCamera?: boolean
+  poseEasing?: 'linear' | 'easeInOutQuad'
+  expressionTransitionMs?: number
+  moraTimingOffsetMs?: number
+}
+
 export interface PlayerSettingsOverrides {
   speedScale?: number
   prePhonemeLength?: number
@@ -13,6 +24,7 @@ export interface PlayerSettingsOverrides {
   autoPlay?: boolean
   usePublicVrms?: boolean
   activeModelId?: string
+  renderSettings?: PlayerRenderSettings
 }
 
 export interface PlayerSettingsPatch {
@@ -22,6 +34,7 @@ export interface PlayerSettingsPatch {
   autoPlay?: boolean | null
   usePublicVrms?: boolean | null
   activeModelId?: string | null
+  renderSettings?: PlayerRenderSettings | null
 }
 
 export interface PlayerCliDefaults {
@@ -150,7 +163,10 @@ function applyPatch(current: PlayerSettingsOverrides, patch: PlayerSettingsPatch
   for (const key of ['speedScale', 'prePhonemeLength', 'postPhonemeLength'] as const) {
     if (!(key in patch)) continue
     const value = patch[key]
-    if (value === null || value === undefined) {
+    if (value === undefined) {
+      continue
+    }
+    if (value === null) {
       delete next[key]
     } else if (Number.isFinite(value)) {
       next[key] = value
@@ -158,7 +174,9 @@ function applyPatch(current: PlayerSettingsOverrides, patch: PlayerSettingsPatch
   }
   if ('autoPlay' in patch) {
     const value = patch.autoPlay
-    if (value === null || value === undefined) {
+    if (value === undefined) {
+      // Undefined means "field omitted"; null explicitly resets.
+    } else if (value === null) {
       next.autoPlay = undefined
     } else {
       next.autoPlay = value
@@ -166,7 +184,9 @@ function applyPatch(current: PlayerSettingsOverrides, patch: PlayerSettingsPatch
   }
   if ('usePublicVrms' in patch) {
     const value = patch.usePublicVrms
-    if (value === null || value === undefined) {
+    if (value === undefined) {
+      // Undefined means "field omitted"; null explicitly resets.
+    } else if (value === null) {
       next.usePublicVrms = undefined
     } else {
       next.usePublicVrms = value
@@ -174,10 +194,22 @@ function applyPatch(current: PlayerSettingsOverrides, patch: PlayerSettingsPatch
   }
   if ('activeModelId' in patch) {
     const value = patch.activeModelId
-    if (value === null || value === undefined || !value.trim()) {
+    if (value === undefined) {
+      // Undefined means "field omitted"; null/empty explicitly resets.
+    } else if (value === null || !value.trim()) {
       next.activeModelId = undefined
     } else {
       next.activeModelId = value
+    }
+  }
+  if ('renderSettings' in patch) {
+    if (patch.renderSettings === undefined) {
+      // Undefined means "field omitted"; null explicitly resets.
+    } else if (patch.renderSettings === null) {
+      next.renderSettings = undefined
+    } else {
+      const renderSettings = normalizeRenderSettings(patch.renderSettings)
+      next.renderSettings = Object.keys(renderSettings).length > 0 ? renderSettings : undefined
     }
   }
   return next
@@ -192,5 +224,29 @@ function normalizeOverrides(input: PlayerSettingsOverrides): PlayerSettingsOverr
   if (typeof input.autoPlay === 'boolean') result.autoPlay = input.autoPlay
   if (typeof input.usePublicVrms === 'boolean') result.usePublicVrms = input.usePublicVrms
   if (typeof input.activeModelId === 'string' && input.activeModelId.trim()) result.activeModelId = input.activeModelId
+  const renderSettings = normalizeRenderSettings(input.renderSettings)
+  if (Object.keys(renderSettings).length > 0) result.renderSettings = renderSettings
+  return result
+}
+
+function normalizeRenderSettings(input: PlayerRenderSettings | undefined): PlayerRenderSettings {
+  if (!input || typeof input !== 'object') return {}
+  const result: PlayerRenderSettings = {}
+  if (typeof input.dprMax === 'number' && Number.isFinite(input.dprMax) && input.dprMax > 0) {
+    result.dprMax = Math.min(3, Math.max(1, input.dprMax))
+  }
+  if (typeof input.sceneLightIntensity === 'number' && Number.isFinite(input.sceneLightIntensity)) {
+    result.sceneLightIntensity = Math.min(1.8, Math.max(0.6, input.sceneLightIntensity))
+  }
+  if (typeof input.blinkEnabled === 'boolean') result.blinkEnabled = input.blinkEnabled
+  if (typeof input.lookAtCamera === 'boolean') result.lookAtCamera = input.lookAtCamera
+  if (typeof input.headTrackCamera === 'boolean') result.headTrackCamera = input.headTrackCamera
+  if (input.poseEasing === 'linear' || input.poseEasing === 'easeInOutQuad') result.poseEasing = input.poseEasing
+  if (typeof input.expressionTransitionMs === 'number' && Number.isFinite(input.expressionTransitionMs)) {
+    result.expressionTransitionMs = Math.min(1000, Math.max(0, input.expressionTransitionMs))
+  }
+  if (typeof input.moraTimingOffsetMs === 'number' && Number.isFinite(input.moraTimingOffsetMs)) {
+    result.moraTimingOffsetMs = Math.min(200, Math.max(-200, input.moraTimingOffsetMs))
+  }
   return result
 }

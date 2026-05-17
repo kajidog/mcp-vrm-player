@@ -10,7 +10,7 @@ import {
   LoopRepeat,
   Matrix4,
   Object3D,
-  type Quaternion,
+  Quaternion,
   Vector3,
 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -76,6 +76,16 @@ const POSE_TRANSITION_DURATION = 0.35
 const HEAD_TRACK_YAW_LIMIT = Math.PI / 3 // 60°
 const HEAD_TRACK_PITCH_LIMIT = (Math.PI / 180) * 25 // 25°
 const HEAD_FACE_FRONT_DEFAULT = new Vector3(0, 0, 1)
+// 1 - exp(-k * dt) の k。値が大きいほど目標へ早く追従する。10 で半減期 ≈ 70ms。
+const HEAD_TRACK_SMOOTHING = 10
+
+// 「視線外し」をキャラ body 基準で配置するためのパラメータ。
+// 頭からの前方距離・横オフセット振幅・わずかな上方向の固定値。
+// AWAY_SIDE_SMOOTHING は左右切替時の半減期係数（10 ≒ 70ms、4 ≒ 170ms）。
+const AWAY_FORWARD_DISTANCE = 0.6
+const AWAY_LATERAL_MAGNITUDE = 0.32
+const AWAY_VERTICAL_OFFSET = 0.08
+const AWAY_SIDE_SMOOTHING = 4
 
 // useFrame で毎回 new しないための共有テンポラリ。
 const _headCamWorld = new Vector3()
@@ -84,9 +94,13 @@ const _headDir = new Vector3()
 const _headFaceFront = new Vector3(0, 0, 1)
 const _headParentInv = new Matrix4()
 const _headEuler = new Euler()
-const _lookAwayCamDir = new Vector3()
-const _lookAwayRight = new Vector3()
-const _lookAwayUp = new Vector3()
+const _headTargetQuat = new Quaternion()
+const _awayBodyForward = new Vector3()
+const _awayBodyRight = new Vector3()
+const _awayBodyQuat = new Quaternion()
+const _awayCamOffset = new Vector3()
+const _awayHeadWorld = new Vector3()
+const _awayWorldUp = new Vector3(0, 1, 0)
 
 interface PoseTransition {
   // 経過秒。duration 到達で完了。
@@ -94,6 +108,15 @@ interface PoseTransition {
   duration: number
   // 切替前のヒューマノイドボーン姿勢スナップショット（ノード参照→quaternion）。
   from: Map<Object3D, Quaternion>
+}
+
+function snapshotHumanoidPose(vrm: VRM): Map<Object3D, Quaternion> {
+  const snapshot = new Map<Object3D, Quaternion>()
+  for (const name of Object.values(VRMHumanBoneName)) {
+    const node = vrm.humanoid.getNormalizedBoneNode(name)
+    if (node) snapshot.set(node, node.quaternion.clone())
+  }
+  return snapshot
 }
 
 function easeInOutQuad(t: number): number {
@@ -148,6 +171,9 @@ export function VRMScene({
   const gazeRef = useRef<VrmPlayerState['currentSegmentGaze']>(gaze)
   const headTrackCameraRef = useRef(headTrackCamera)
   const lookAwayTargetRef = useRef<Object3D>(new Object3D())
+  // 横方向の符号を補間で保持する（カメラが反対側に回り込んだとき即時反転せず滑らかに切替える）。
+  // 値域 -1..+1、最初のフレームで camera 側から目標値が決まる。
+  const awayLateralRef = useRef(0)
   const poseEasingRef = useRef(poseEasing)
   const expressionTransitionMsRef = useRef(expressionTransitionMs)
   const expressionWeightsRef = useRef<Map<string, number>>(new Map())
@@ -156,13 +182,20 @@ export function VRMScene({
   const mixerRef = useRef<AnimationMixer | null>(null)
   const actionRef = useRef<AnimationAction | null>(null)
   const activeVrmaKeyRef = useRef<string | null>(null)
+  const actionKeyRef = useRef<string | null>(null)
+  const actionLoopsRef = useRef(false)
+  const fadingActionsRef = useRef<Array<{ action: AnimationAction; remaining: number }>>([])
   const [loadedVrmaKey, setLoadedVrmaKey] = useState<string | null>(null)
   // 直近に切替えたポーズの id。同 id 再適用時には遷移を起動しない。
   const lastPoseIdRef = useRef<string | null>(null)
   const poseTransitionRef = useRef<PoseTransition | null>(null)
+  const pendingPoseTransitionRef = useRef<PoseTransition | null>(null)
   // ポーズ effect が「同じ pose 識別子」と判定するときも、VRM 自体が差し変わっていれば
   // 旧モデルのボーンノードを参照したスナップショットを残さないために再起動する。
   const lastVrmRef = useRef<VRM | null>(null)
+  // 頭追従のスムージング用に「前フレームに適用した頭ボーンのローカル回転」を保持する。
+  // null のとき次のフレームで現在の quaternion から初期化し、跳ねを防ぐ。
+  const headSmoothedQuatRef = useRef<Quaternion | null>(null)
 
   useEffect(() => {
     poseRef.current = pose ?? DEFAULT_POSE_SOURCE
@@ -190,6 +223,8 @@ export function VRMScene({
 
   useEffect(() => {
     headTrackCameraRef.current = headTrackCamera
+    // OFF にしたタイミングで貯めた回転は捨て、再 ON 時はその瞬間のポーズから滑らかに動き出す。
+    if (!headTrackCamera) headSmoothedQuatRef.current = null
   }, [headTrackCamera])
 
   useEffect(() => {
@@ -269,6 +304,10 @@ export function VRMScene({
       mixerRef.current = new AnimationMixer(loaded.scene)
       actionRef.current = null
       activeVrmaKeyRef.current = null
+      actionKeyRef.current = null
+      actionLoopsRef.current = false
+      fadingActionsRef.current = []
+      pendingPoseTransitionRef.current = null
       setVrm(loaded)
       onLoadedRef.current?.()
 
@@ -342,6 +381,10 @@ export function VRMScene({
           mixerRef.current?.stopAllAction()
           mixerRef.current = null
           actionRef.current = null
+          actionKeyRef.current = null
+          actionLoopsRef.current = false
+          fadingActionsRef.current = []
+          pendingPoseTransitionRef.current = null
           VRMUtils.deepDispose(current.scene)
         }
       }
@@ -355,6 +398,10 @@ export function VRMScene({
         mixerRef.current?.stopAllAction()
         mixerRef.current = null
         actionRef.current = null
+        actionKeyRef.current = null
+        actionLoopsRef.current = false
+        fadingActionsRef.current = []
+        pendingPoseTransitionRef.current = null
         VRMUtils.deepDispose(current.scene)
       }
     }
@@ -368,19 +415,21 @@ export function VRMScene({
     // モデルが差し替わった場合は旧スナップショットを破棄して比較 id もリセット。
     if (lastVrmRef.current !== vrm) {
       poseTransitionRef.current = null
+      pendingPoseTransitionRef.current = null
       lastPoseIdRef.current = null
       lastVrmRef.current = vrm
     }
 
     // ポーズ id が変化した時だけ、現在のヒューマノイドボーン姿勢をスナップショットして
-    // 遷移を起動する。これにより useFrame 側で旧姿勢→新姿勢を slerp で滑らかに繋げる。
+    // 遷移元を保存する。VRMA はロード完了前に遷移を始めると初期姿勢へ沈むため、開始を遅らせる。
+    let changedPoseTransition: PoseTransition | null = null
     if (lastPoseIdRef.current !== poseSource.id) {
-      const snapshot = new Map<Object3D, Quaternion>()
-      for (const name of Object.values(VRMHumanBoneName)) {
-        const node = vrm.humanoid.getNormalizedBoneNode(name)
-        if (node) snapshot.set(node, node.quaternion.clone())
+      changedPoseTransition = {
+        elapsed: 0,
+        duration: POSE_TRANSITION_DURATION,
+        from: snapshotHumanoidPose(vrm),
       }
-      poseTransitionRef.current = { elapsed: 0, duration: POSE_TRANSITION_DURATION, from: snapshot }
+      pendingPoseTransitionRef.current = changedPoseTransition
       lastPoseIdRef.current = poseSource.id
     }
 
@@ -388,17 +437,19 @@ export function VRMScene({
       mixerRef.current?.stopAllAction()
       actionRef.current = null
       activeVrmaKeyRef.current = null
+      actionKeyRef.current = null
+      actionLoopsRef.current = false
+      fadingActionsRef.current = []
       vrm.humanoid.resetNormalizedPose()
+      if (changedPoseTransition) poseTransitionRef.current = changedPoseTransition
+      pendingPoseTransitionRef.current = null
       setLoadedVrmaKey(null)
       return
     }
 
     const key = `${poseSource.vrmaUrl}:${poseSource.vrmaData?.byteLength ?? 0}:${poseSource.loop ? 'loop' : 'once'}`
-    if (activeVrmaKeyRef.current === key && actionRef.current) return
-    mixerRef.current?.stopAllAction()
-    actionRef.current = null
+    if (actionKeyRef.current === key && actionRef.current) return
     activeVrmaKeyRef.current = key
-    vrm.humanoid.resetNormalizedPose()
 
     let cancelled = false
     const load = getVrmaAnimation(vrmaCacheRef.current, poseSource.vrmaUrl, poseSource.vrmaData)
@@ -407,12 +458,29 @@ export function VRMScene({
         if (cancelled || activeVrmaKeyRef.current !== key) return
         const mixer = mixerRef.current ?? new AnimationMixer(vrm.scene)
         mixerRef.current = mixer
+        const previousAction = actionRef.current
         const clip = createVRMAnimationClip(vrmAnimation, vrm)
         const action = mixer.clipAction(clip)
         action.setLoop(poseSource.loop ? LoopRepeat : LoopOnce, poseSource.loop ? Number.POSITIVE_INFINITY : 1)
         action.clampWhenFinished = true
-        action.reset().play()
+        action.enabled = true
+        action.setEffectiveTimeScale(1)
+        action.setEffectiveWeight(1)
+        action.reset()
+        if (previousAction && previousAction !== action) {
+          action.play()
+          previousAction.crossFadeTo(action, POSE_TRANSITION_DURATION, false)
+          fadingActionsRef.current.push({ action: previousAction, remaining: POSE_TRANSITION_DURATION })
+          poseTransitionRef.current = pendingPoseTransitionRef.current
+          pendingPoseTransitionRef.current = null
+        } else {
+          action.fadeIn(POSE_TRANSITION_DURATION).play()
+          poseTransitionRef.current = pendingPoseTransitionRef.current
+          pendingPoseTransitionRef.current = null
+        }
         actionRef.current = action
+        actionKeyRef.current = key
+        actionLoopsRef.current = poseSource.loop
         setLoadedVrmaKey(key)
       })
       .catch((error: unknown) => {
@@ -434,6 +502,8 @@ export function VRMScene({
       vrm.lookAt.target = null
       vrm.lookAt.reset()
     } else if (gaze === 'away') {
+      // 0 から始めることで、視線が一旦正面に揃ってからスッと逆側へ流れる立ち上がりになる。
+      awayLateralRef.current = 0
       vrm.lookAt.target = lookAwayTargetRef.current
     } else {
       vrm.lookAt.target = camera
@@ -451,24 +521,61 @@ export function VRMScene({
     if (!vrm) return
     elapsedRef.current += delta
     if (lookAtCameraRef.current && gazeRef.current === 'away') {
-      camera.getWorldPosition(_headCamWorld)
-      camera.getWorldDirection(_lookAwayCamDir)
-      _lookAwayRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
-      _lookAwayUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize()
-      lookAwayTargetRef.current.position
-        .copy(_headCamWorld)
-        .addScaledVector(_lookAwayCamDir, -0.25)
-        .addScaledVector(_lookAwayRight, 0.75)
-        .addScaledVector(_lookAwayUp, 0.25)
+      // キャラの body 前方／右を world 空間で得て、カメラが body のどちら側にいるかを
+      // 内積の符号で判定し、その逆側に視線ターゲットを置く。
+      const headNode = vrm.humanoid.getNormalizedBoneNode(VRMHumanBoneName.Head)
+      if (headNode) {
+        vrm.scene.getWorldQuaternion(_awayBodyQuat)
+        _awayBodyForward
+          .copy(vrm.lookAt?.faceFront ?? HEAD_FACE_FRONT_DEFAULT)
+          .applyQuaternion(_awayBodyQuat)
+          .normalize()
+        _awayBodyRight.crossVectors(_awayBodyForward, _awayWorldUp).normalize()
+        headNode.getWorldPosition(_awayHeadWorld)
+        camera.getWorldPosition(_awayCamOffset)
+        _awayCamOffset.sub(_awayHeadWorld)
+        const cameraSide = _awayCamOffset.dot(_awayBodyRight)
+        // カメラがほぼ正面（|side| が極小）の場合は前回の符号を保つために 0 扱いで進める。
+        const targetLateral = cameraSide > 1e-4 ? -1 : cameraSide < -1e-4 ? 1 : awayLateralRef.current
+        const smoothing = 1 - Math.exp(-AWAY_SIDE_SMOOTHING * delta)
+        awayLateralRef.current += (targetLateral - awayLateralRef.current) * smoothing
+        lookAwayTargetRef.current.position
+          .copy(_awayHeadWorld)
+          .addScaledVector(_awayBodyForward, AWAY_FORWARD_DISTANCE)
+          .addScaledVector(_awayBodyRight, awayLateralRef.current * AWAY_LATERAL_MAGNITUDE)
+          .addScaledVector(_awayWorldUp, AWAY_VERTICAL_OFFSET)
+        lookAwayTargetRef.current.updateMatrixWorld(true)
+      }
     }
     const poseSource = poseRef.current
     if (poseSource.kind === 'builtin') {
       mixerRef.current?.stopAllAction()
       actionRef.current = null
       activeVrmaKeyRef.current = null
+      actionKeyRef.current = null
+      actionLoopsRef.current = false
+      fadingActionsRef.current = []
       poseSource.applyToVrm(vrm, elapsedRef.current)
-    } else if (loadedVrmaKey === activeVrmaKeyRef.current) {
+    } else if (actionRef.current || fadingActionsRef.current.length > 0 || loadedVrmaKey === activeVrmaKeyRef.current) {
+      const action = actionRef.current
+      const clipDuration = action?.getClip().duration ?? 0
+      const previousActionTime = action?.time ?? 0
+      const loopAdvanceWindow = action ? Math.max(delta * Math.abs(action.getEffectiveTimeScale()) * 2, 1 / 60) : 0
+      const shouldWatchLoopWrap =
+        !!action && actionLoopsRef.current && clipDuration > 0 && previousActionTime >= clipDuration - loopAdvanceWindow
+      const beforeLoopWrap = shouldWatchLoopWrap ? snapshotHumanoidPose(vrm) : null
       mixerRef.current?.update(delta)
+      if (action && beforeLoopWrap && actionRef.current === action && action.time + 1e-4 < previousActionTime) {
+        poseTransitionRef.current = { elapsed: 0, duration: POSE_TRANSITION_DURATION, from: beforeLoopWrap }
+      }
+      const fadingActions = fadingActionsRef.current
+      if (fadingActions.length > 0) {
+        for (const fading of fadingActions) {
+          fading.remaining -= delta
+          if (fading.remaining <= 0 && fading.action !== actionRef.current) fading.action.stop()
+        }
+        fadingActionsRef.current = fadingActions.filter((fading) => fading.remaining > 0)
+      }
     }
 
     // 切替直後の数フレームは、適用済みボーン（=新ポーズ）を旧ポーズへ slerp で寄せ、
@@ -510,7 +617,15 @@ export function VRMScene({
           const clampedYaw = Math.max(-HEAD_TRACK_YAW_LIMIT, Math.min(HEAD_TRACK_YAW_LIMIT, yaw))
           const clampedPitch = Math.max(-HEAD_TRACK_PITCH_LIMIT, Math.min(HEAD_TRACK_PITCH_LIMIT, pitch))
           _headEuler.set(clampedPitch, clampedYaw, 0, 'YXZ')
-          headNode.quaternion.setFromEuler(_headEuler)
+          _headTargetQuat.setFromEuler(_headEuler)
+          // 親（体）が回ったフレームでも、保持済みのローカル回転を slerp で目標へ寄せる。
+          // 直接代入していたときは親回転に同期して頭が一瞬で再アライメントするので、これを止める。
+          if (!headSmoothedQuatRef.current) {
+            headSmoothedQuatRef.current = headNode.quaternion.clone()
+          }
+          const k = 1 - Math.exp(-HEAD_TRACK_SMOOTHING * delta)
+          headSmoothedQuatRef.current.slerp(_headTargetQuat, k)
+          headNode.quaternion.copy(headSmoothedQuatRef.current)
         }
       }
     }

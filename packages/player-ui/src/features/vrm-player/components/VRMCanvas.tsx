@@ -1,11 +1,14 @@
+import type { App } from '@modelcontextprotocol/ext-apps'
 import { Html, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import { type ComponentRef, useEffect, useRef, useState } from 'react'
 import type { PoseSource } from '~/features/poses/types'
+import { SettingsIcon } from '~/icons'
 import { useColorScheme } from '../hooks/useColorScheme'
 import type { MouthRef } from '../hooks/useLipSync'
 import { useRenderSettings } from '../hooks/useRenderSettings'
 import type { VrmPlayerState, VrmSource } from '../types'
+import { RenderSettingsPanel } from './RenderSettingsPanel'
 import { VRMScene } from './VRMScene'
 
 // drei の OrbitControls はサードパーティ実装（three-stdlib）を ref に出すので、
@@ -13,6 +16,7 @@ import { VRMScene } from './VRMScene'
 type OrbitControlsImpl = ComponentRef<typeof OrbitControls>
 
 interface VRMCanvasProps {
+  app?: App | null
   // null のときはモデル無しの空シーンを描画する（背景・ライト・グリッドのみ）。
   source: VrmSource | null
   onError: (message: string) => void
@@ -32,6 +36,11 @@ interface VRMCanvasProps {
   onLoadStart?: () => void
   onLoaded?: () => void
   heightClassName?: string
+  renderPanelOpen?: boolean
+  onOpenRenderPanel?: () => void
+  onCloseRenderPanel?: () => void
+  onOpenServerSettings?: () => void
+  onOpenPoses?: () => void
 }
 
 const SCENE_COLORS = {
@@ -186,6 +195,7 @@ function WheelTrackController({
  * モデルそのものの読み込みは `VRMScene` 側に委譲する。
  */
 export function VRMCanvas({
+  app = null,
   source,
   onError,
   pose,
@@ -203,11 +213,16 @@ export function VRMCanvas({
   onLoadStart,
   onLoaded,
   heightClassName = 'h-[420px]',
+  renderPanelOpen = false,
+  onOpenRenderPanel,
+  onCloseRenderPanel,
+  onOpenServerSettings,
+  onOpenPoses,
 }: VRMCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const colorScheme = useColorScheme()
   const colors = SCENE_COLORS[colorScheme]
-  const { settings: renderSettings } = useRenderSettings()
+  const { settings: renderSettings } = useRenderSettings(app)
   // VRMScene からセンタリング情報（上半身 y）を受け取って、カメラ追従と吹き出し位置に流す。
   const [centerY, setCenterY] = useState<number | null>(null)
   const [headPosition, setHeadPosition] = useState<[number, number, number] | null>(null)
@@ -230,7 +245,7 @@ export function VRMCanvas({
 
   return (
     <div
-      className={`vrm-canvas-host overflow-hidden border border-[var(--ui-border)] bg-[var(--ui-surface)] ${
+      className={`vrm-canvas-host relative overflow-hidden border border-[var(--ui-border)] bg-[var(--ui-surface)] ${
         fullscreen ? 'h-full min-h-0 rounded-none' : 'rounded-lg'
       }`}
     >
@@ -245,9 +260,10 @@ export function VRMCanvas({
           }}
         >
           <color attach="background" args={[colors.canvasBg]} />
-          <ambientLight intensity={1.2} />
-          <directionalLight position={[1.5, 2.5, 2]} intensity={1.5} />
-          <directionalLight position={[-1, 1.5, -1]} intensity={0.5} />
+          <ambientLight intensity={1.45 * renderSettings.sceneLightIntensity} />
+          <hemisphereLight args={['#ffffff', '#d9e1ec', 0.35 * renderSettings.sceneLightIntensity]} />
+          <directionalLight position={[1.5, 2.5, 2]} intensity={1.7 * renderSettings.sceneLightIntensity} />
+          <directionalLight position={[-1, 1.5, -1]} intensity={0.75 * renderSettings.sceneLightIntensity} />
           <gridHelper args={[6, 12, colors.gridA, colors.gridB]} position={[0, -1, 0]} />
           {source ? (
             <VRMScene
@@ -293,13 +309,32 @@ export function VRMCanvas({
           ) : null}
         </Canvas>
       </div>
+      {onOpenRenderPanel && !renderPanelOpen ? (
+        <button
+          type="button"
+          title="表示設定"
+          aria-label="表示設定を開く"
+          onClick={onOpenRenderPanel}
+          className="absolute bottom-3 right-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] shadow-md hover:border-[var(--ui-accent)]"
+        >
+          <SettingsIcon />
+        </button>
+      ) : null}
+      {renderPanelOpen && onCloseRenderPanel && onOpenServerSettings && onOpenPoses ? (
+        <RenderSettingsPanel
+          app={app}
+          onClose={onCloseRenderPanel}
+          onOpenServerSettings={onOpenServerSettings}
+          onOpenPoses={onOpenPoses}
+        />
+      ) : null}
     </div>
   )
 }
 
 /**
- * キャラクターの頭上にワールド座標で浮かぶ吹き出し。drei の Html を使って DOM で見栄えを作る。
- * 位置はモデル上半身 y からのオフセットで決め、頭部に被らない高さに置く。
+ * キャラクターの顔の右側にワールド座標で浮かぶ吹き出し。drei の Html を使って DOM で
+ * 見栄えを作る。頭ボーン位置から下方向へ伸ばし、デフォルトカメラで画面外に出ないようにする。
  * centerY が null（VRM 未ロード等）の時は仮値で 0.4 を使う。
  */
 interface SpeechBubbleItem {
@@ -322,10 +357,11 @@ function SpeechBubble3D({
   transitionKey: string
   direction: 'up' | 'down'
 }) {
-  // 吹き出し左下を「顔の少し右上」に置く。頭ボーンが取れない時だけ従来の上半身基準に戻す。
+  // 吹き出しは「顔の少し右」に左上を置く。頭の上に出すとデフォルトカメラで画面外に
+  // はみ出しやすいので、頭ボーン y を基準に下方向へ伸ばす形にしている。
   const position: [number, number, number] = headPosition
-    ? [headPosition[0] + 0.16, headPosition[1] + 0.18, headPosition[2]]
-    : [0, (centerY ?? 0.4) + 0.85, 0]
+    ? [headPosition[0] + 0.18, headPosition[1] + 0.02, headPosition[2]]
+    : [0, (centerY ?? 0.4) + 0.35, 0]
   const [items, setItems] = useState<SpeechBubbleItem[]>([{ key: transitionKey, text, phase: 'enter', direction }])
 
   useEffect(() => {
@@ -343,8 +379,8 @@ function SpeechBubble3D({
   }, [direction, text, transitionKey])
 
   return (
-    <Html position={position} zIndexRange={[100, 0]}>
-      <div className="pointer-events-none relative min-h-9 w-[min(260px,40vw)] -translate-y-full select-none">
+    <Html position={position} zIndexRange={[30, 0]}>
+      <div className="pointer-events-none relative min-h-9 w-[min(260px,40vw)] select-none">
         <div className="invisible whitespace-pre-wrap break-words px-3 py-1.5 text-[11px] leading-relaxed">{text}</div>
         {items.map((item) => (
           <div

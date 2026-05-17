@@ -12,7 +12,20 @@ interface SettingsViewProps {
   busy: boolean
   onBack: () => void
   onOpenPoses: () => void
-  onApplied: () => Promise<void>
+  onApplied: (settings: PlayerSettings) => Promise<void>
+}
+
+function toEffectiveSettings(settings: {
+  overrides: PlayerSettings
+  cliDefaults: PlayerSettings & { speedScale: number; autoPlay: boolean }
+}): PlayerSettings {
+  return {
+    speedScale: settings.overrides.speedScale ?? settings.cliDefaults.speedScale,
+    prePhonemeLength: settings.overrides.prePhonemeLength ?? settings.cliDefaults.prePhonemeLength,
+    postPhonemeLength: settings.overrides.postPhonemeLength ?? settings.cliDefaults.postPhonemeLength,
+    autoPlay: settings.overrides.autoPlay ?? settings.cliDefaults.autoPlay,
+    usePublicVrms: settings.overrides.usePublicVrms ?? settings.cliDefaults.usePublicVrms ?? true,
+  }
 }
 
 export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: SettingsViewProps) {
@@ -33,13 +46,7 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
       .then((settings) => {
         if (cancelled) return
         setCliDefaults(settings.cliDefaults)
-        setValues({
-          speedScale: settings.overrides.speedScale ?? settings.cliDefaults.speedScale,
-          prePhonemeLength: settings.overrides.prePhonemeLength ?? settings.cliDefaults.prePhonemeLength ?? 0,
-          postPhonemeLength: settings.overrides.postPhonemeLength ?? settings.cliDefaults.postPhonemeLength ?? 0,
-          autoPlay: settings.overrides.autoPlay ?? settings.cliDefaults.autoPlay,
-          usePublicVrms: settings.overrides.usePublicVrms ?? settings.cliDefaults.usePublicVrms ?? true,
-        })
+        setValues(toEffectiveSettings(settings))
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -56,17 +63,11 @@ export function SettingsView({ app, busy, onBack, onOpenPoses, onApplied }: Sett
     setLoading(true)
     setError(null)
     try {
-      await setPlayerSettingsOnServer(app, reset ? { reset: true } : values)
-      await onApplied()
-      if (reset) {
-        setValues({
-          speedScale: cliDefaults.speedScale,
-          prePhonemeLength: cliDefaults.prePhonemeLength ?? 0,
-          postPhonemeLength: cliDefaults.postPhonemeLength ?? 0,
-          autoPlay: cliDefaults.autoPlay,
-          usePublicVrms: cliDefaults.usePublicVrms ?? true,
-        })
-      }
+      const saved = await setPlayerSettingsOnServer(app, reset ? { reset: true } : values)
+      setCliDefaults(saved.cliDefaults)
+      const effectiveSettings = toEffectiveSettings(saved)
+      setValues(effectiveSettings)
+      await onApplied(effectiveSettings)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
