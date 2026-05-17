@@ -1,13 +1,11 @@
 # mcp-vrm-player
 
-開発中
-
-`mcp-vrm-player` は、MCP Apps 対応チャット上で 3D VRM モデルを表示しながら会話できる MCP サーバーです。
+MCP Apps 対応チャット上で 3D VRM モデルを表示しながら会話できる MCP サーバーです。
 
 ## できること
 
 - 3D VRM プレイヤー（VRM 1.0 / 0.x、Inline / Fullscreen 切替）
-- 音素タイミング駆動のリップシンク。`aivisspeech` 選択時は音量解析にフォールバック
+- 音素タイミング駆動のリップシンク
 - セグメント単位で表情・ポーズ・視線・速度を制御。感情ごとに VRM 表情と話者をバインド
 - 自動瞬き、ポーズのクロスフェード、Spring Bone の初期姿勢リセット
 - TTS バックエンド: VOICEVOX / さくらの AI Engine / AivisSpeech
@@ -17,14 +15,12 @@
 
 ## MCP Apps
 
-![alt text](./docs/img/default.png)
+![チャット上に表示時の画像](./docs/img/default.png)
 
 [ChatGPT](https://chatgpt.com) / [Claude](https://claude.ai) など MCP Apps 対応クライアントの会話画面内に、3D VRM プレイヤーが描画されます。
-
-- ネイティブアプリのインストールは不要。スマートフォンのブラウザでも動作します
-- チャットから VRM を呼び出して発話させたり、モデル管理画面でモデル登録・ポーズ追加・話者プレビューが行えます
+- チャット上で VRM を呼び出して発話させたり、モデル管理画面を表示してモデル登録・ポーズ追加・話者プレビューができます
+- MCPサーバーから表示に使用するデータ（HTMLやjs、VRMや音声）を渡しているため、クライアント側（スマホ・PC）はURLを追加するだけで使えるようになります。個別に環境構築は必要ありません
 - `vrm_speak_player` / `vrm_open_model_manager` は MCP Apps UI を開けるクライアントから利用してください
-
 
 ## クイックスタート
 
