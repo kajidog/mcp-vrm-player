@@ -79,6 +79,7 @@ TTS_ENGINE=aivisspeech TTS_BASE_URL=http://host.docker.internal:10101 docker com
 | `vrm_start_here` | （なし） | 最初に呼ぶ。エンジン状態・登録モデル概要・既定モデル・既定ポーズ名・感情名・プレイヤー設定を返す |
 | `vrm_find_models` | `modelId?`, `query?` | 登録モデルと有効なポーズ名を検索。`modelId` / `segments[].pose` を決める前に呼ぶ |
 | `vrm_list_vrms` | （なし） | 登録 VRM 一覧を返す。話者 ID・感情バインド・ポーズ名・更新時刻などのメタデータ込み |
+| `vrm_set_default_model` | `modelId` | 既定 VRM モデルを切り替える（以降 `vrm_speak_player` が `modelId` 省略時に使用）。直前の既定を `previousDefault` として返すので元に戻せる |
 | `vrm_speak_player` (App tool) | `modelId?`, `segments[]` | VRM プレイヤー UI を開き、セグメント単位で発話・表情・ポーズ・視線・速度を再生 |
 | `vrm_open_model_manager` (App tool) | `modelId?`, `knowsHowToUse?` | VRM の登録 / 編集 UI を開く |
 
