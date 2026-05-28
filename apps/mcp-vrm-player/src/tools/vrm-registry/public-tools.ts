@@ -209,6 +209,55 @@ export function registerVrmPublicTools(
   registerToolIfEnabled(
     server,
     disabledTools,
+    'set_default_model',
+    {
+      title: 'Set Default VRM Model',
+      description:
+        'Set which registered VRM model is used as the default. Pass a modelId from list_vrms or find_models. The previous default is cleared automatically. Use this when the user asks to change the default model.',
+      inputSchema: {
+        modelId: z.string().describe('VRM model ID to set as the default.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ modelId }: { modelId: string }, extra: ToolHandlerExtra): Promise<CallToolResult> => {
+      try {
+        const visibility = resolveVrmVisibility(playerSettings, extra)
+        const target = registry.get(modelId)
+        if (!target || target.ownerUserId !== visibility.userId) {
+          throw new Error(`VRM model not found: ${modelId}`)
+        }
+        const model = registry.setDefault(modelId, visibility.userId)
+        const structured = {
+          defaultModel: {
+            modelId: model.id,
+            name: model.name,
+            isDefault: model.isDefault,
+            poses: resolvePoseNames(model, poseRegistry),
+          },
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Default VRM model set to "${model.name}" (${model.id}).\n${JSON.stringify(structured, null, 2)}`,
+            },
+          ],
+          structuredContent: structured,
+        }
+      } catch (error) {
+        return createErrorResponse(error)
+      }
+    }
+  )
+
+  registerToolIfEnabled(
+    server,
+    disabledTools,
     'list_vrms',
     {
       title: 'List VRMs',

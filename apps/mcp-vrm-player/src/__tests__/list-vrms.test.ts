@@ -153,6 +153,35 @@ describe('list_vrms public tool', () => {
     expect(structured.models[0].poses).toContain('idle')
   })
 
+  it('set_default_model は既定モデルを切り替え、以前の既定を解除する', async () => {
+    const a = await registry.register({
+      name: 'Alice',
+      speakerId: 7,
+      isDefault: true,
+      vrmBase64: SAMPLE_VRM_BASE64,
+    })
+    const b = await registry.register({ name: 'Bob', speakerId: 3, vrmBase64: SAMPLE_VRM_BASE64 })
+    expect(registry.getDefault()?.id).toBe(a.id)
+
+    const invoke = buildHarness(registry)
+    const result = await invoke('set_default_model', { modelId: b.id })
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      defaultModel: { modelId: string; name: string; isDefault: boolean }
+    }
+    expect(structured.defaultModel.modelId).toBe(b.id)
+    expect(structured.defaultModel.isDefault).toBe(true)
+    expect(registry.getDefault()?.id).toBe(b.id)
+    expect(registry.get(a.id)?.isDefault).toBe(false)
+  })
+
+  it('set_default_model は存在しない modelId でエラーを返す', async () => {
+    const invoke = buildHarness(registry)
+    const result = await invoke('set_default_model', { modelId: 'missing-id' })
+    expect(result.isError).toBe(true)
+  })
+
   it('MCP向けポーズ一覧はポーズ名で重複排除して返す', async () => {
     const poseRegistry = new PoseRegistryStore({ cacheDir: TMP })
     await poseRegistry.register({ id: 'wave_a', loop: true, vrmaBase64: SAMPLE_VRM_BASE64 })

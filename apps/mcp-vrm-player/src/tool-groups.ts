@@ -15,6 +15,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
     'get_player_state',
     'open_dictionary_ui',
     'list_vrms',
+    'set_default_model',
   ],
   /** Dictionary read/write tools kept for backward-compatible --disable-groups handling */
   dictionary: [
