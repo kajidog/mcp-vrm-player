@@ -133,4 +133,25 @@ describe('vrm_set_default_model', () => {
     const result = await handler({ modelId: 'does-not-exist' }, {})
     expect(result.isError).toBe(true)
   })
+
+  it('他ユーザー所有の公開モデルは明確なエラーで弾く', async () => {
+    const { handlers, registry } = buildHarness()
+    const handler = handlers.get('vrm_set_default_model')!
+
+    // anonymous からは可視（公開）だが所有者は別ユーザー。
+    const publicModel = await registry.register({
+      ownerUserId: 'user-b',
+      name: 'Shared',
+      speakerId: 1,
+      isPublic: true,
+      vrmBase64: SAMPLE_VRM_BASE64,
+    })
+
+    const result = await handler({ modelId: publicModel.id }, {})
+    expect(result.isError).toBe(true)
+    const text = (result.content?.[0] as { type: 'text'; text: string }).text
+    expect(text).toContain('owned by another user')
+    // 既定は変更されない（user-b 側の default のまま）。
+    expect(registry.getDefault('anonymous')).toBeUndefined()
+  })
 })

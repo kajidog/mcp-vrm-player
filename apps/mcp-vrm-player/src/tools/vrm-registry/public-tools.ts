@@ -260,7 +260,7 @@ export function registerVrmPublicTools(
     {
       title: 'Set Default Model',
       description:
-        'Set the persistent default VRM model used by speak_player when modelId is omitted. Returns the previous default so it can be restored.',
+        'Set one of your own registered VRM models as the persistent default used by speak_player when modelId is omitted. Public models owned by other users cannot be set as the default. Returns the previous default so it can be restored.',
       inputSchema: {
         modelId: z.string().describe('VRM model ID to set as the default. Discover IDs with vrm_list_vrms.'),
       },
@@ -277,6 +277,14 @@ export function registerVrmPublicTools(
         const previous = registry.getDefault(visibility.userId)
         const target = registry.getVisible(modelId, visibility)
         if (!target) throw new Error(`VRM model not found: ${modelId}`)
+        // The registry default is per-owner, so a visible public model owned by another
+        // user cannot be set as your default. Fail with a clear, actionable message
+        // instead of the owner-scoped store throwing a misleading "VRM not found".
+        if (target.ownerUserId !== visibility.userId) {
+          throw new Error(
+            `Cannot set "${target.name}" (${modelId}) as the default: it is a public model owned by another user. Only your own registered models can be set as the default.`
+          )
+        }
         const updated = registry.setDefault(modelId, visibility.userId)
         // Keep the player UI (which prefers activeModelId) in sync with the new default.
         playerSettings?.set({ activeModelId: updated.id }, visibility.userId)
