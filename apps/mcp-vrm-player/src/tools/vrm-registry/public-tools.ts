@@ -252,6 +252,73 @@ export function registerVrmPublicTools(
       }
     }
   )
+
+  registerToolIfEnabled(
+    server,
+    disabledTools,
+    'set_default_model',
+    {
+      title: 'Set Default Model',
+      description:
+        'Set one of your own registered VRM models as the persistent default used by speak_player when modelId is omitted. Public models owned by other users cannot be set as the default. Returns the previous default so it can be restored.',
+      inputSchema: {
+        modelId: z.string().describe('VRM model ID to set as the default. Discover IDs with vrm_list_vrms.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ modelId }: { modelId: string }, extra: ToolHandlerExtra): Promise<CallToolResult> => {
+      try {
+        const visibility = resolveVrmVisibility(playerSettings, extra)
+        const previous = registry.getDefault(visibility.userId)
+        const target = registry.getVisible(modelId, visibility)
+        if (!target) throw new Error(`VRM model not found: ${modelId}`)
+        // The registry default is per-owner, so a visible public model owned by another
+        // user cannot be set as your default. Fail with a clear, actionable message
+        // instead of the owner-scoped store throwing a misleading "VRM not found".
+        if (target.ownerUserId !== visibility.userId) {
+          throw new Error(
+            `Cannot set "${target.name}" (${modelId}) as the default: it is a public model owned by another user. Only your own registered models can be set as the default.`
+          )
+        }
+        const updated = registry.setDefault(modelId, visibility.userId)
+        // Keep the player UI (which prefers activeModelId) in sync with the new default.
+        playerSettings?.set({ activeModelId: updated.id }, visibility.userId)
+        const previousDefault = previous ? { modelId: previous.id, name: previous.name } : null
+        const structured = {
+          newDefault: {
+            modelId: updated.id,
+            name: updated.name,
+            poses: resolvePoseNames(updated, poseRegistry),
+          },
+          previousDefault,
+          appliesTo: [
+            'vrm_speak_player (when modelId is omitted)',
+            'player UI model resolution',
+            'vrm_start_here display',
+          ],
+        }
+        const revertHint = previousDefault
+          ? ` Previous default: "${previousDefault.name}" — restore it by calling this tool with modelId="${previousDefault.modelId}".`
+          : ''
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Default VRM model set to "${updated.name}". vrm_speak_player will use it when modelId is omitted.${revertHint}\n${JSON.stringify(structured, null, 2)}`,
+            },
+          ],
+          structuredContent: structured,
+        }
+      } catch (error) {
+        return createErrorResponse(error)
+      }
+    }
+  )
 }
 
 function filterModels(models: VrmModel[], modelId: string | undefined, query: string | undefined): VrmModel[] {
