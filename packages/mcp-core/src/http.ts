@@ -219,14 +219,20 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
   }
   const sessions: Map<string, SessionEntry> = new Map()
 
+  // initialize 処理中（onsessioninitialized 前）のセッション数。
+  // 並行 initialize が全員同じ sessions.size を観測して maxSessions を
+  // 突破しないよう、同期的にこのカウンタで枠を予約する
+  let pendingInitializations = 0
+
   function closeSession(sessionId: string, reason: string): void {
     const entry = sessions.get(sessionId)
     if (!entry) return
+    // 容量の解放を確定させるため同期的に削除する（onclose 側の削除は no-op になる）
+    sessions.delete(sessionId)
     console.log(`Closing session ${shortSessionId(sessionId)} (${reason})`)
-    // transport.onclose が sessions からの削除とアプリ側クリーンアップを行う
     entry.transport.close().catch((e) => {
       console.error(`Failed to close session ${shortSessionId(sessionId)}:`, e)
-      sessions.delete(sessionId)
+      // close 失敗時は onclose が呼ばれない可能性があるためここでクリーンアップする
       deleteSessionConfig(sessionId)
       onSessionClosed?.(sessionId)
     })
@@ -297,8 +303,22 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
         if (isInitializeRequest(body)) {
           console.log('Creating new WebStandard session')
 
-          if (sessions.size >= maxSessions) {
+          // 同期的に枠を予約してから非同期処理に入る（予約なしだと並行 initialize が
+          // すべて旧サイズを観測して上限を超過できてしまう）
+          if (sessions.size + pendingInitializations >= maxSessions) {
             evictOldestSession()
+          }
+          if (sessions.size + pendingInitializations >= maxSessions) {
+            console.log('Rejected initialize request: session capacity exhausted')
+            return c.json(badRequestError('Too many concurrent sessions'), { status: 503 })
+          }
+          pendingInitializations++
+          let reserved = true
+          const releaseReservation = () => {
+            if (reserved) {
+              reserved = false
+              pendingInitializations--
+            }
           }
 
           // コールバック用にリクエストを保持
@@ -310,6 +330,8 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
             onsessioninitialized: (newSessionId) => {
               console.log(`Session initialized: ${shortSessionId(newSessionId)}`)
               sessions.set(newSessionId, { transport, subject, lastActivity: Date.now() })
+              // 予約をコミット済みセッションへ振り替える
+              releaseReservation()
 
               // アプリ固有の初期化処理
               onSessionInitialized?.(newSessionId, rawRequest, authInfo)
@@ -329,18 +351,23 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
             }
           }
 
-          // セッションごとに新しいサーバーインスタンスを使用
-          const sessionServer = serverFactory ? serverFactory() : server
           try {
-            await sessionServer.connect(transport)
-          } catch (e) {
-            // connect 失敗時に transport を放置するとセッションがリークする
-            await transport.close().catch(() => {})
-            throw e
-          }
+            // セッションごとに新しいサーバーインスタンスを使用
+            const sessionServer = serverFactory ? serverFactory() : server
+            try {
+              await sessionServer.connect(transport)
+            } catch (e) {
+              // connect 失敗時に transport を放置するとセッションがリークする
+              await transport.close().catch(() => {})
+              throw e
+            }
 
-          // リクエスト処理（parsedBodyを渡す）
-          return transport.handleRequest(c.req.raw, { parsedBody: body, authInfo })
+            // リクエスト処理（parsedBodyを渡す）
+            return await transport.handleRequest(c.req.raw, { parsedBody: body, authInfo })
+          } finally {
+            // 初期化に至らなかった場合の予約解放（成功時は onsessioninitialized 側で解放済み）
+            releaseReservation()
+          }
         }
       }
 

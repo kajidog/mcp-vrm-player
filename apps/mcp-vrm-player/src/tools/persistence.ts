@@ -14,6 +14,8 @@ const DEFAULT_DEBOUNCE_MS = 300
  */
 export class DebouncedJsonFile {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
+  private savePromise: Promise<void> | null = null
+  private saveRequested = false
 
   constructor(
     readonly filePath: string,
@@ -48,15 +50,37 @@ export class DebouncedJsonFile {
     }, this.debounceMs)
   }
 
-  /** atomic（tmp 書き込み → rename）に即時保存する。失敗しても例外は投げず警告のみ。 */
+  /**
+   * atomic（tmp 書き込み → rename）に即時保存する。失敗しても例外は投げず警告のみ。
+   *
+   * 書き込みは常に直列化する: 並行して別の tmp→rename を走らせると、
+   * 遅いファイルシステムでは古いペイロードの rename が後勝ちして
+   * 新しい保存を上書きしうるため、進行中の書き込みがあれば完了を待って
+   * 最新のペイロードで書き直す。
+   */
   async saveToDisk(): Promise<void> {
-    try {
-      const payload = JSON.stringify(this.buildPayload())
-      const tempPath = `${this.filePath}.${randomUUID()}.tmp`
-      await writeFile(tempPath, payload, 'utf-8')
-      await rename(tempPath, this.filePath)
-    } catch (error) {
-      console.warn(`Warning: failed to persist ${this.label}:`, error)
+    this.saveRequested = true
+    while (this.saveRequested) {
+      if (!this.savePromise) {
+        this.savePromise = this.runSaveLoop().finally(() => {
+          this.savePromise = null
+        })
+      }
+      await this.savePromise
+    }
+  }
+
+  private async runSaveLoop(): Promise<void> {
+    while (this.saveRequested) {
+      this.saveRequested = false
+      try {
+        const payload = JSON.stringify(this.buildPayload())
+        const tempPath = `${this.filePath}.${randomUUID()}.tmp`
+        await writeFile(tempPath, payload, 'utf-8')
+        await rename(tempPath, this.filePath)
+      } catch (error) {
+        console.warn(`Warning: failed to persist ${this.label}:`, error)
+      }
     }
   }
 
