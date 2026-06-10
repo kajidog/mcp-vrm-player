@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { rename, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { ANONYMOUS_USER_ID } from '../auth-context.js'
+import { unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+import {
+  DebouncedJsonFile,
+  decodeAndValidateGlbBase64,
+  normalizeOwnerUserId,
+  writeBinaryAtomic,
+} from '../persistence.js'
 import { createDefaultBuiltinAttachments, isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { extractVrmThumbnail } from './thumbnail.js'
 import type { VrmModel } from './types.js'
@@ -49,16 +54,18 @@ export interface VrmVisibilityOptions {
  */
 export class VrmRegistryStore {
   private readonly registry = new Map<string, VrmModel>()
-  private readonly registryFilePath: string
+  private readonly file: DebouncedJsonFile
   private readonly vrmDir: string
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: VrmRegistryStoreOptions) {
-    this.registryFilePath = options.registryFilePath || join(options.cacheDir, REGISTRY_FILE_NAME)
+    this.file = new DebouncedJsonFile(
+      options.registryFilePath || join(options.cacheDir, REGISTRY_FILE_NAME),
+      'VRM registry',
+      () => ({ version: 1, savedAt: Date.now(), entries: [...this.registry.values()] })
+    )
     this.vrmDir = join(options.cacheDir, VRM_DIR_NAME)
 
     try {
-      mkdirSync(dirname(this.registryFilePath), { recursive: true })
       mkdirSync(this.vrmDir, { recursive: true })
     } catch (error) {
       console.warn('Warning: failed to prepare VRM registry directory:', error)
@@ -100,7 +107,7 @@ export class VrmRegistryStore {
     const vrmFilePath = join(this.vrmDir, `${id}.vrm`)
     const buffer = decodeAndValidateVrmBase64(input.vrmBase64)
 
-    await this.writeBinaryAtomic(vrmFilePath, buffer)
+    await writeBinaryAtomic(vrmFilePath, buffer)
     const thumbnail = extractVrmThumbnail(buffer)
 
     const now = Date.now()
@@ -128,7 +135,7 @@ export class VrmRegistryStore {
       this.clearDefaultExcept(id, model.ownerUserId)
     }
     this.ensureDefaultForOwner(model.ownerUserId, model.isDefault ? id : undefined)
-    this.scheduleSave()
+    this.file.scheduleSave()
     return model
   }
 
@@ -153,7 +160,7 @@ export class VrmRegistryStore {
       this.clearDefaultExcept(id, next.ownerUserId)
     }
     this.ensureDefaultForOwner(next.ownerUserId, fields.isDefault === true ? id : undefined)
-    this.scheduleSave()
+    this.file.scheduleSave()
     return this.registry.get(id) ?? next
   }
 
@@ -163,7 +170,7 @@ export class VrmRegistryStore {
     assertOwner(existing, ownerUserId)
 
     const buffer = decodeAndValidateVrmBase64(vrmBase64)
-    await this.writeBinaryAtomic(existing.vrmFilePath, buffer)
+    await writeBinaryAtomic(existing.vrmFilePath, buffer)
     const thumbnail = extractVrmThumbnail(buffer)
 
     const next: VrmModel = {
@@ -174,7 +181,7 @@ export class VrmRegistryStore {
       updatedAt: Date.now(),
     }
     this.registry.set(id, next)
-    this.scheduleSave()
+    this.file.scheduleSave()
     return next
   }
 
@@ -185,7 +192,7 @@ export class VrmRegistryStore {
 
     this.registry.delete(id)
     this.ensureDefaultForOwner(existing.ownerUserId)
-    this.scheduleSave()
+    this.file.scheduleSave()
 
     try {
       if (existsSync(existing.vrmFilePath)) {
@@ -248,76 +255,33 @@ export class VrmRegistryStore {
     }
   }
 
-  private async writeBinaryAtomic(filePath: string, buffer: Buffer): Promise<void> {
-    const tempPath = `${filePath}.tmp`
-    await writeFile(tempPath, buffer)
-    await rename(tempPath, filePath)
-  }
-
-  private scheduleSave(): void {
-    if (this.debounceTimer !== null) clearTimeout(this.debounceTimer)
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null
-      this.saveToDisk().catch((e) => console.warn('Warning: failed to persist VRM registry:', e))
-    }, 300)
-  }
-
-  private async saveToDisk(): Promise<void> {
-    try {
-      const payload = JSON.stringify({
-        version: 1,
-        savedAt: Date.now(),
-        entries: [...this.registry.values()],
-      })
-      const tempPath = `${this.registryFilePath}.tmp`
-      await writeFile(tempPath, payload, 'utf-8')
-      await rename(tempPath, this.registryFilePath)
-    } catch (error) {
-      console.warn('Warning: failed to persist VRM registry:', error)
-    }
-  }
-
   private loadFromDisk(): void {
-    try {
-      if (!existsSync(this.registryFilePath)) return
-      const raw = readFileSync(this.registryFilePath, 'utf-8')
-      const parsed = JSON.parse(raw) as { entries?: VrmModel[] }
-      if (!Array.isArray(parsed.entries)) return
+    const parsed = this.file.load<{ entries?: VrmModel[] }>()
+    if (!parsed || !Array.isArray(parsed.entries)) return
 
-      for (const entry of parsed.entries) {
-        if (!entry || typeof entry.id !== 'string') continue
-        if (!existsSync(entry.vrmFilePath)) {
-          // バイナリが消えているエントリは無視（DB だけ残った状態を救う）
-          continue
-        }
-        const poses = entry.poses?.filter(
-          (pose) => !pose.poseId.startsWith('builtin:') || isBuiltinPoseResourceId(pose.poseId)
-        )
-        this.registry.set(entry.id, {
-          ...entry,
-          ownerUserId: normalizeOwnerUserId(entry.ownerUserId),
-          ...(poses ? { poses } : {}),
-        })
+    for (const entry of parsed.entries) {
+      if (!entry || typeof entry.id !== 'string') continue
+      if (!existsSync(entry.vrmFilePath)) {
+        // バイナリが消えているエントリは無視（DB だけ残った状態を救う）
+        continue
       }
-      const ownerIds = new Set([...this.registry.values()].map((entry) => entry.ownerUserId))
-      for (const ownerUserId of ownerIds) this.ensureDefaultForOwner(ownerUserId)
-    } catch (error) {
-      console.warn('Warning: failed to load VRM registry, starting empty:', error)
+      const poses = entry.poses?.filter(
+        (pose) => !pose.poseId.startsWith('builtin:') || isBuiltinPoseResourceId(pose.poseId)
+      )
+      this.registry.set(entry.id, {
+        ...entry,
+        ownerUserId: normalizeOwnerUserId(entry.ownerUserId),
+        ...(poses ? { poses } : {}),
+      })
     }
+    const ownerIds = new Set([...this.registry.values()].map((entry) => entry.ownerUserId))
+    for (const ownerUserId of ownerIds) this.ensureDefaultForOwner(ownerUserId)
   }
 
   // テスト用: デバウンス完了を待つ
   async flush(): Promise<void> {
-    if (this.debounceTimer !== null) {
-      clearTimeout(this.debounceTimer)
-      this.debounceTimer = null
-    }
-    await this.saveToDisk()
+    await this.file.flush()
   }
-}
-
-function normalizeOwnerUserId(ownerUserId: string | undefined): string {
-  return ownerUserId?.trim() || ANONYMOUS_USER_ID
 }
 
 function isVisibleToUser(model: VrmModel, options: VrmVisibilityOptions): boolean {
@@ -332,26 +296,10 @@ function assertOwner(model: VrmModel, ownerUserId: string | undefined): void {
 }
 
 function decodeAndValidateVrmBase64(value: string): Buffer {
-  const raw = value.trim()
-  const withoutDataUrl = raw.startsWith('data:') ? (raw.split(',', 2)[1] ?? '') : raw
-  const normalized = withoutDataUrl.replace(/\s/g, '')
-  if (!normalized) {
-    throw new Error('vrmBase64 is required')
-  }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || /=/.test(normalized.slice(0, -2))) {
-    throw new Error('vrmBase64 must be valid base64')
-  }
-
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
-  const buffer = Buffer.from(padded, 'base64')
-  if (buffer.byteLength === 0) {
-    throw new Error('VRM file is empty')
-  }
-  if (buffer.byteLength > MAX_VRM_BYTES) {
-    throw new Error(`VRM file is too large. Maximum size is ${MAX_VRM_BYTES} bytes.`)
-  }
-  if (buffer.byteLength < 12 || buffer.subarray(0, 4).toString('ascii') !== 'glTF') {
-    throw new Error('VRM file must be a GLB/VRM binary starting with glTF magic')
-  }
-  return buffer
+  return decodeAndValidateGlbBase64(value, {
+    fieldName: 'vrmBase64',
+    fileLabel: 'VRM file',
+    magicLabel: 'GLB/VRM',
+    maxBytes: MAX_VRM_BYTES,
+  })
 }

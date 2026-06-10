@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useRef, useState } from 'react'
-import { parseToolJson } from '../utils/toolJson'
+import { parseToolJson } from '~/lib/toolJson'
 
 // 話者ポートレート（キャラクター画像）のフェッチ + uuid 単位のメモリキャッシュ。
 export function useSpeakerPortrait(app: App | null, uuid: string | null) {

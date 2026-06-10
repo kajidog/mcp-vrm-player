@@ -1,6 +1,6 @@
 import type { TtsEngine } from '../engines/types.js'
 import { handleError } from '../error.js'
-import type { AudioQuery, PlaybackOptions } from '../types.js'
+import type { AudioQuery } from '../types.js'
 import { downloadBlob, isBrowser } from '../utils.js'
 import type { AudioFileManager } from './file-manager.js'
 
@@ -11,18 +11,6 @@ export interface SpeechServiceConfig {
   defaultPitchScale?: number
   defaultPrePhonemeLength?: number
   defaultPostPhonemeLength?: number
-  defaultPlaybackOptions: PlaybackOptions
-  maxSegmentLength: number
-}
-
-export interface SpeechServiceSpeakOptions extends PlaybackOptions {
-  speaker?: number
-  speedScale?: number
-  pitchScale?: number
-  intonationScale?: number
-  volumeScale?: number
-  prePhonemeLength?: number
-  postPhonemeLength?: number
 }
 
 export class SpeechService {

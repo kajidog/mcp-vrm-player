@@ -11,9 +11,9 @@ import { SessionStateStore } from './session-state.js'
 
 export const playerResourceUri = 'ui://speak-player/player.html'
 
-type SpeakerEntry = { id: number; name: string; characterName: string; uuid: string }
+export type SpeakerEntry = { id: number; name: string; characterName: string; uuid: string }
 
-type SynthesizeInput = {
+export type SynthesizeInput = {
   userId?: string
   text: string
   speaker: number
@@ -27,7 +27,7 @@ type SynthesizeInput = {
   accentPhrases?: AccentPhrase[]
 }
 
-type SynthesizeResult = {
+export type SynthesizeResult = {
   audioBase64: string
   text: string
   speaker: number

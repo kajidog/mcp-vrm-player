@@ -1,4 +1,3 @@
-import { getSessionConfig } from '@kajidog/mcp-core'
 import { parseAudioQuery, parseStringInput } from '@kajidog/tts-client'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
@@ -14,16 +13,3 @@ export const createErrorResponse = (error: unknown): CallToolResult => ({
   ],
   isError: true,
 })
-
-export const createSuccessResponse = (text: string): CallToolResult => ({
-  content: [{ type: 'text', text }],
-})
-
-/**
- * 有効な話者IDを取得（優先順位: 明示的パラメータ > セッション設定 > グローバル設定）
- */
-export const getEffectiveSpeaker = (explicitSpeaker?: number, sessionId?: string): number | undefined => {
-  if (explicitSpeaker !== undefined) return explicitSpeaker
-  const sessionConfig = getSessionConfig(sessionId)
-  return sessionConfig?.defaultSpeaker
-}

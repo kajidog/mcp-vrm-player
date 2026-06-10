@@ -2,14 +2,32 @@ import crypto from 'node:crypto'
 import http from 'node:http'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 
+// このサーバーは認証なしで有効な JWT を発行する開発専用のスタブです。
+// 到達できる相手は誰でも MCP サーバーが受理するトークンを取得できるため、
+// 本番環境では絶対に起動しないでください。
+if (process.env.NODE_ENV === 'production') {
+  console.error('[Auth] dev-auth-server is a development-only stub and must not run with NODE_ENV=production.')
+  process.exit(1)
+}
+
 const PORT = process.env.PORT || 3001
-const HOST = 'localhost'
-const ISSUER = process.env.MCP_AUTH_SERVER_URL || `http://${HOST}:${PORT}`
+// 既定ではループバックのみにバインドする。コンテナ内などで外部公開が必要な場合のみ
+// HOST=0.0.0.0 を明示的に指定する
+const HOST = process.env.HOST || '127.0.0.1'
+const ISSUER = process.env.MCP_AUTH_SERVER_URL || `http://localhost:${PORT}`
 const RESOURCE_NAME = process.env.MCP_RESOURCE_NAME || 'VRM MCP Server'
 const RESOURCE_AUDIENCE = process.env.MCP_OAUTH_AUDIENCE || process.env.MCP_SERVER_URL || RESOURCE_NAME
 
 // Store for codes
 const codes = new Map()
+const CODE_TTL_MS = 60 * 1000
+
+function purgeExpiredCodes() {
+  const now = Date.now()
+  for (const [code, data] of codes) {
+    if (now - data.createdAt > CODE_TTL_MS) codes.delete(code)
+  }
+}
 
 // Generate keys for signing
 let privateKey
@@ -32,7 +50,8 @@ function generateId() {
 
 // S256 Code Challenge Verification
 function verifyCodeChallenge(verifier, challenge) {
-  if (!verifier || !challenge) return true
+  if (!challenge) return true // PKCE 未使用のクライアント
+  if (!verifier) return false // challenge があるのに verifier 省略は拒否
   const hash = crypto.createHash('sha256').update(verifier).digest()
   const computedChallenge = hash.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
   return computedChallenge === challenge
@@ -64,6 +83,16 @@ const server = http.createServer(async (req, res) => {
   // 1. Authorize Endpoint
   if (req.method === 'GET' && pathname === '/authorize') {
     const query = Object.fromEntries(parsedUrl.searchParams)
+
+    if (query.code_challenge && query.code_challenge_method && query.code_challenge_method !== 'S256') {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(
+        JSON.stringify({ error: 'invalid_request', error_description: 'Only S256 code_challenge_method is supported' })
+      )
+      return
+    }
+
+    purgeExpiredCodes()
     const code = generateId()
     codes.set(code, {
       clientId: query.client_id,
@@ -98,6 +127,7 @@ const server = http.createServer(async (req, res) => {
     console.log(`[Auth] Token request: grant_type=${grantType}, code=${code}`)
 
     if (grantType === 'authorization_code') {
+      purgeExpiredCodes()
       const authData = codes.get(code)
       if (!authData) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -173,7 +203,8 @@ const server = http.createServer(async (req, res) => {
 })
 
 setupKeys().then(() => {
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
+    console.log('!!! DEV ONLY: this server issues valid JWTs to ANYONE who can reach it. Never expose it. !!!')
     console.log(`Dev JWT Auth Server running at http://${HOST}:${PORT}`)
     console.log(`- Authorize: http://${HOST}:${PORT}/authorize`)
     console.log(`- Token:     http://${HOST}:${PORT}/token`)

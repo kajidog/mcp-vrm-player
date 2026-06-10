@@ -143,7 +143,7 @@ export function parseEnvFromDefs(defs: ConfigDefs, env: Record<string, string | 
  * 設定ファイルの内容を設定定義のキー名に正規化する
  *
  * 設定ファイルではCLIフラグ名のキー（"--" なし、kebab-case → camelCase）を使えるようにする。
- * 例: { "speaker": 3, "use-streaming": true } → { defaultSpeaker: 3, useStreaming: true }
+ * 例: { "speaker": 3, "auto-play": true } → { defaultSpeaker: 3, autoPlay: true }
  */
 export function parseConfigFileFromDefs(
   defs: ConfigDefs,

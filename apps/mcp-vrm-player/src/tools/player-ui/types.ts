@@ -1,70 +1,17 @@
-import type { AccentPhrase, AudioQuery, TtsEngine } from '@kajidog/tts-client'
+import type { TtsEngine } from '@kajidog/tts-client'
 import type { PlayerSettingsStore } from '../player/player-settings-store.js'
+import type { SpeakerEntry, SynthesizeInput, SynthesizeResult } from '../player/runtime.js'
+import type { PlayerSegmentState, PlayerSessionState } from '../player/session-state.js'
 import type { PoseRegistryStore } from '../pose-registry/store.js'
 import type { VrmRegistryStore } from '../vrm-registry/store.js'
 
-export type SynthesizeResult = {
-  audioBase64: string
-  text: string
-  speaker: number
-  speakerName: string
-  kana?: string
-  audioQuery?: AudioQuery
-  accentPhrases?: AccentPhrase[]
-  speedScale: number
-  intonationScale?: number
-  volumeScale?: number
-  prePhonemeLength?: number
-  postPhonemeLength?: number
-  pauseLengthScale?: number
-}
-
-export type SpeakerEntry = { id: number; name: string; characterName: string; uuid: string }
-
-export type PlayerSegmentState = {
-  text: string
-  speaker: number
-  speakerName?: string
-  kana?: string
-  audioQuery?: AudioQuery
-  accentPhrases?: AccentPhrase[]
-  speedScale: number
-  intonationScale?: number
-  volumeScale?: number
-  prePhonemeLength?: number
-  postPhonemeLength?: number
-  pauseLengthScale?: number
-  explicitSpeedScale?: number
-  requestedPose?: string
-  pose?: string
-  poseFallbackReason?: string
-  emotion?: string
-  expressionName?: string
-  expressionWeight?: number
-}
-
-export type PlayerSessionState = {
-  userId?: string
-  segments: PlayerSegmentState[]
-  updatedAt: number
-}
+// 正準定義は player/session-state.ts および player/runtime.ts にあり、ここでは再エクスポートのみ行う。
+export type { PlayerSegmentState, PlayerSessionState, SpeakerEntry, SynthesizeInput, SynthesizeResult }
 
 export interface PlayerUIShared {
   playerEngine: TtsEngine
   playerResourceUri: string
-  synthesizeWithCache: (input: {
-    userId?: string
-    text: string
-    speaker: number
-    audioQuery?: AudioQuery
-    speedScale?: number
-    intonationScale?: number
-    volumeScale?: number
-    prePhonemeLength?: number
-    postPhonemeLength?: number
-    pauseLengthScale?: number
-    accentPhrases?: AccentPhrase[]
-  }) => Promise<SynthesizeResult>
+  synthesizeWithCache: (input: SynthesizeInput) => Promise<SynthesizeResult>
   setSessionState: (key: string, state: PlayerSessionState) => void
   getSessionState: (key: string) => PlayerSessionState | undefined
   getSpeakerList: () => Promise<SpeakerEntry[]>

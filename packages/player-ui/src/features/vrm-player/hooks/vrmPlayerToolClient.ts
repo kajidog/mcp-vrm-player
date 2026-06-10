@@ -1,27 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import type { EmotionBinding } from '~/features/emotions'
 import type { ModelPoseAttachment } from '~/features/poses/types'
+import { assertNoToolError, getTextPayload } from '~/lib/toolJson'
 import type { AudioQuery } from '~/types'
 import type { VrmPayload } from '../types'
-
-interface TextContent {
-  type: 'text'
-  text: string
-}
-
-// CallToolResult の content 配列から最初の text コンテンツを取り出す。
-function getTextPayload(content: unknown): string | null {
-  if (!Array.isArray(content)) return null
-  const textContent = content.find((c) => (c as { type?: string }).type === 'text') as TextContent | undefined
-  return textContent?.type === 'text' ? textContent.text : null
-}
-
-// isError=true の場合は text コンテンツをエラーメッセージとして送出する。
-function assertNoToolError(result: { isError?: boolean; content?: unknown }): void {
-  if (!result.isError) return
-  const payload = getTextPayload(result.content)
-  throw new Error(payload ?? 'Tool call failed')
-}
 
 /**
  * サーバ側の `_resolve_default_vrm_for_player` を叩き、デフォルト VRM を取得する。

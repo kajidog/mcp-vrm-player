@@ -1,10 +1,10 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useCallback, useEffect, useRef } from 'react'
+import { base64ToBlobUrl } from '~/lib/binary'
+import { parseToolJson } from '~/lib/toolJson'
 import type { AudioQuery } from '~/types'
 import type { LipSyncController } from '../../vrm-player/hooks/useLipSync'
 import type { PoseSegment } from '../../vrm-player/utils/vrmPayload'
-import { base64ToBlobUrl } from '../utils/binary'
-import { parseToolJson } from '../utils/toolJson'
 
 // 試聴用のサンプル文。短く中立な発話を 1 つランダムに選んで再生する。
 const SAMPLE_PHRASES = [

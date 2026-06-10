@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useState } from 'react'
-import { parseToolJson } from '../utils/toolJson'
+import { parseToolJson } from '~/lib/toolJson'
 
 export interface SpeakerStyle {
   id: number

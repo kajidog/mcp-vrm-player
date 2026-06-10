@@ -22,6 +22,30 @@ interface AuthorizationRedirect {
   redirect_to?: string
 }
 
+// redirect_uri の許可リスト。VITE_ALLOWED_REDIRECT_ORIGINS（カンマ区切りの origin）に
+// 一致するか、ループバックアドレスのみ許可する。検証なしで access_token を付けて
+// リダイレクトするとトークン窃取（open redirect）に悪用されるため必須。
+const allowedRedirectOrigins = (import.meta.env.VITE_ALLOWED_REDIRECT_ORIGINS || '')
+  .split(',')
+  .map((origin: string) => origin.trim())
+  .filter(Boolean)
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1'
+}
+
+function isAllowedRedirectUri(uri: string): boolean {
+  try {
+    const url = new URL(uri)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+    if (isLoopbackHostname(url.hostname)) return true
+    if (url.protocol !== 'https:') return false
+    return allowedRedirectOrigins.includes(url.origin)
+  } catch {
+    return false
+  }
+}
+
 function getRoutePath(): string {
   const params = new URLSearchParams(window.location.search)
   const redirectedPath = params.get('p')
@@ -77,6 +101,7 @@ function App() {
   const [consentLoading, setConsentLoading] = useState(false)
   const [consentError, setConsentError] = useState<string | null>(null)
   const [decisionLoading, setDecisionLoading] = useState(false)
+  const [redirectUriError, setRedirectUriError] = useState<string | null>(null)
   const localCallbackHandledRef = useRef(false)
 
   const params = new URLSearchParams(window.location.search)
@@ -91,16 +116,22 @@ function App() {
     const stateParam = params.get('state')
 
     if (uri) {
-      setRedirectUri(uri)
-      setState(stateParam)
-      sessionStorage.setItem('oauth_redirect_uri', uri)
-      if (stateParam) {
-        sessionStorage.setItem('oauth_state', stateParam)
+      if (!isAllowedRedirectUri(uri)) {
+        setRedirectUriError(uri)
+        sessionStorage.removeItem('oauth_redirect_uri')
+        sessionStorage.removeItem('oauth_state')
+      } else {
+        setRedirectUri(uri)
+        setState(stateParam)
+        sessionStorage.setItem('oauth_redirect_uri', uri)
+        if (stateParam) {
+          sessionStorage.setItem('oauth_state', stateParam)
+        }
       }
     } else {
       const storedUri = sessionStorage.getItem('oauth_redirect_uri')
       const storedState = sessionStorage.getItem('oauth_state')
-      if (storedUri) {
+      if (storedUri && isAllowedRedirectUri(storedUri)) {
         setRedirectUri(storedUri)
         setState(storedState)
       }
@@ -134,13 +165,22 @@ function App() {
       const targetState = state || sessionStorage.getItem('oauth_state')
 
       if (targetRedirectUri) {
-        const url = new URL(targetRedirectUri)
-        url.searchParams.set('access_token', accessToken)
-        url.searchParams.set('token_type', 'bearer')
-        url.searchParams.set('expires_in', String(expiresIn))
-        if (targetState) {
-          url.searchParams.set('state', targetState)
+        if (!isAllowedRedirectUri(targetRedirectUri)) {
+          setRedirectUriError(targetRedirectUri)
+          return
         }
+
+        // トークンはフラグメントで渡す（クエリだとサーバーログ・履歴・Referer に漏れる）
+        const url = new URL(targetRedirectUri)
+        const fragment = new URLSearchParams({
+          access_token: accessToken,
+          token_type: 'bearer',
+          expires_in: String(expiresIn),
+        })
+        if (targetState) {
+          fragment.set('state', targetState)
+        }
+        url.hash = fragment.toString()
 
         sessionStorage.removeItem('oauth_redirect_uri')
         sessionStorage.removeItem('oauth_state')
@@ -258,6 +298,22 @@ function App() {
         .catch(console.error)
     }
   }, [redirectWithToken])
+
+  if (redirectUriError) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={styles.title}>OAuth Error</h1>
+          <p style={styles.error}>
+            この redirect_uri は許可されていません: <code style={styles.code}>{redirectUriError}</code>
+          </p>
+          <p style={styles.hint}>
+            許可するには VITE_ALLOWED_REDIRECT_ORIGINS にこの origin を追加してください（localhost は常に許可）。
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

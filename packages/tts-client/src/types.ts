@@ -24,10 +24,6 @@ export interface TtsConfig {
   defaultPrePhonemeLength?: number
   /** 音声の後の無音時間（秒） */
   defaultPostPhonemeLength?: number
-  /** テキスト分割時の最大文字数（デフォルト: 150） */
-  maxSegmentLength?: number
-  /** デフォルトの再生オプション */
-  defaultPlaybackOptions?: PlaybackOptions
 }
 
 /**
@@ -175,16 +171,4 @@ export interface UserDictionaryWord {
 export interface SpeechSegment {
   text: string
   speaker?: number
-}
-
-/**
- * 音声再生のオプション
- */
-export interface PlaybackOptions {
-  /** 即座に再生を開始するかどうか */
-  immediate?: boolean
-  /** 再生開始まで待機するかどうか */
-  waitForStart?: boolean
-  /** 再生終了まで待機するかどうか */
-  waitForEnd?: boolean
 }

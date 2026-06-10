@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { rename, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { ANONYMOUS_USER_ID } from '../auth-context.js'
+import { unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+import {
+  DebouncedJsonFile,
+  decodeAndValidateGlbBase64,
+  normalizeOwnerUserId,
+  writeBinaryAtomic,
+} from '../persistence.js'
+import type { VrmRegistryStore } from '../vrm-registry/store.js'
 import type { PoseResource } from './types.js'
 
 const REGISTRY_FILE_NAME = 'pose-registry.json'
@@ -33,16 +39,18 @@ export interface UpdatePoseInput {
 
 export class PoseRegistryStore {
   private readonly registry = new Map<string, PoseResource>()
-  private readonly registryFilePath: string
+  private readonly file: DebouncedJsonFile
   private readonly poseDir: string
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: PoseRegistryStoreOptions) {
-    this.registryFilePath = options.registryFilePath || join(options.cacheDir, REGISTRY_FILE_NAME)
+    this.file = new DebouncedJsonFile(
+      options.registryFilePath || join(options.cacheDir, REGISTRY_FILE_NAME),
+      'pose registry',
+      () => ({ version: 1, savedAt: Date.now(), entries: [...this.registry.values()] })
+    )
     this.poseDir = join(options.cacheDir, POSE_DIR_NAME)
 
     try {
-      mkdirSync(dirname(this.registryFilePath), { recursive: true })
       mkdirSync(this.poseDir, { recursive: true })
     } catch (error) {
       console.warn('Warning: failed to prepare pose registry directory:', error)
@@ -73,7 +81,9 @@ export class PoseRegistryStore {
     if (this.registry.has(id)) throw new Error(`Pose already exists: ${id}`)
     const buffer = decodeAndValidateVrmaBase64(input.vrmaBase64)
     const vrmaFilePath = join(this.poseDir, `${id}.vrma`)
-    await this.writeBinaryAtomic(vrmaFilePath, buffer)
+    await writeBinaryAtomic(vrmaFilePath, buffer)
+    // await中に同じIDが並行登録されている可能性があるため再確認する（TOCTOU対策）。
+    if (this.registry.has(id)) throw new Error(`Pose already exists: ${id}`)
 
     const now = Date.now()
     const pose: PoseResource = {
@@ -87,7 +97,7 @@ export class PoseRegistryStore {
       updatedAt: now,
     }
     this.registry.set(id, pose)
-    this.scheduleSave()
+    this.file.scheduleSave()
     return pose
   }
 
@@ -102,7 +112,7 @@ export class PoseRegistryStore {
       updatedAt: Date.now(),
     }
     this.registry.set(id, next)
-    this.scheduleSave()
+    this.file.scheduleSave()
     return next
   }
 
@@ -111,7 +121,7 @@ export class PoseRegistryStore {
     if (!existing) return
     assertOwner(existing, ownerUserId)
     this.registry.delete(id)
-    this.scheduleSave()
+    this.file.scheduleSave()
     try {
       if (existsSync(existing.vrmaFilePath)) await unlink(existing.vrmaFilePath)
     } catch (error) {
@@ -126,57 +136,40 @@ export class PoseRegistryStore {
     return readFileSync(pose.vrmaFilePath).toString('base64')
   }
 
-  private async writeBinaryAtomic(filePath: string, buffer: Buffer): Promise<void> {
-    const tempPath = `${filePath}.tmp`
-    await writeFile(tempPath, buffer)
-    await rename(tempPath, filePath)
-  }
-
-  private scheduleSave(): void {
-    if (this.debounceTimer !== null) clearTimeout(this.debounceTimer)
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null
-      this.saveToDisk().catch((e) => console.warn('Warning: failed to persist pose registry:', e))
-    }, 300)
-  }
-
-  private async saveToDisk(): Promise<void> {
-    try {
-      const payload = JSON.stringify({ version: 1, savedAt: Date.now(), entries: [...this.registry.values()] })
-      const tempPath = `${this.registryFilePath}.tmp`
-      await writeFile(tempPath, payload, 'utf-8')
-      await rename(tempPath, this.registryFilePath)
-    } catch (error) {
-      console.warn('Warning: failed to persist pose registry:', error)
-    }
-  }
-
   private loadFromDisk(): void {
-    try {
-      if (!existsSync(this.registryFilePath)) return
-      const parsed = JSON.parse(readFileSync(this.registryFilePath, 'utf-8')) as { entries?: PoseResource[] }
-      if (!Array.isArray(parsed.entries)) return
-      for (const entry of parsed.entries) {
-        if (!entry || typeof entry.id !== 'string') continue
-        if (!existsSync(entry.vrmaFilePath)) continue
-        this.registry.set(entry.id, { ...entry, ownerUserId: normalizeOwnerUserId(entry.ownerUserId) })
-      }
-    } catch (error) {
-      console.warn('Warning: failed to load pose registry, starting empty:', error)
+    const parsed = this.file.load<{ entries?: PoseResource[] }>()
+    if (!parsed || !Array.isArray(parsed.entries)) return
+    for (const entry of parsed.entries) {
+      if (!entry || typeof entry.id !== 'string') continue
+      if (!existsSync(entry.vrmaFilePath)) continue
+      this.registry.set(entry.id, { ...entry, ownerUserId: normalizeOwnerUserId(entry.ownerUserId) })
     }
   }
 
   async flush(): Promise<void> {
-    if (this.debounceTimer !== null) {
-      clearTimeout(this.debounceTimer)
-      this.debounceTimer = null
-    }
-    await this.saveToDisk()
+    await this.file.flush()
   }
 }
 
-function normalizeOwnerUserId(ownerUserId: string | undefined): string {
-  return ownerUserId?.trim() || ANONYMOUS_USER_ID
+/**
+ * 読み取り可能なポーズを解決する。
+ * 所有しているか、公開VRMから参照されている場合のみ返す。
+ */
+export function getReadablePose(
+  poseRegistry: PoseRegistryStore,
+  vrmRegistry: VrmRegistryStore,
+  poseId: string,
+  userId: string,
+  usePublicVrms: boolean
+): PoseResource | undefined {
+  const pose = poseRegistry.get(poseId)
+  if (!pose) return undefined
+  if (pose.ownerUserId === userId) return pose
+  if (!usePublicVrms) return undefined
+  const referencedByPublicVrm = vrmRegistry
+    .listVisible({ userId, usePublicVrms })
+    .some((model) => model.isPublic && model.poses?.some((attachment) => attachment.poseId === poseId))
+  return referencedByPublicVrm ? pose : undefined
 }
 
 function assertOwner(pose: PoseResource, ownerUserId: string | undefined): void {
@@ -187,26 +180,14 @@ function assertOwner(pose: PoseResource, ownerUserId: string | undefined): void 
 export function validatePoseId(value: string): string {
   const id = value.trim()
   if (!POSE_ID_PATTERN.test(id)) throw new Error('Pose ID must match /^[A-Za-z0-9_-]{1,64}$/')
-  if (id.startsWith('builtin:')) throw new Error('Pose ID starting with builtin: is reserved')
   return id
 }
 
 function decodeAndValidateVrmaBase64(value: string): Buffer {
-  const raw = value.trim()
-  const withoutDataUrl = raw.startsWith('data:') ? (raw.split(',', 2)[1] ?? '') : raw
-  const normalized = withoutDataUrl.replace(/\s/g, '')
-  if (!normalized) throw new Error('vrmaBase64 is required')
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || /=/.test(normalized.slice(0, -2))) {
-    throw new Error('vrmaBase64 must be valid base64')
-  }
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
-  const buffer = Buffer.from(padded, 'base64')
-  if (buffer.byteLength === 0) throw new Error('VRMA file is empty')
-  if (buffer.byteLength > MAX_VRMA_BYTES) {
-    throw new Error(`VRMA file is too large. Maximum size is ${MAX_VRMA_BYTES} bytes.`)
-  }
-  if (buffer.byteLength < 12 || buffer.subarray(0, 4).toString('ascii') !== 'glTF') {
-    throw new Error('VRMA file must be a GLB/VRMA binary starting with glTF magic')
-  }
-  return buffer
+  return decodeAndValidateGlbBase64(value, {
+    fieldName: 'vrmaBase64',
+    fileLabel: 'VRMA file',
+    magicLabel: 'GLB/VRMA',
+    maxBytes: MAX_VRMA_BYTES,
+  })
 }

@@ -11,18 +11,6 @@ export function handleError(message: string, error: unknown): never {
 }
 
 /**
- * エラーハンドリングを行い、エラーメッセージを返します (例外をスローしない)
- * @param message エラーメッセージのプレフィックス
- * @param error 発生したエラー
- * @returns エラーメッセージ
- */
-export function formatError(message: string, error: unknown): string {
-  const errorMsg = error instanceof Error ? error.message : String(error)
-  console.error(`${message}: ${errorMsg}`, error)
-  return `${message}: ${errorMsg}`
-}
-
-/**
  * VOICEVOX関連のエラーコード
  */
 export enum VoicevoxErrorCode {
@@ -61,42 +49,4 @@ export class VoicevoxError extends Error {
 
     return details
   }
-}
-
-/**
- * エラーハンドリングユーティリティ関数
- * アプリケーション全体で統一されたエラーハンドリングを提供
- */
-
-/**
- * エラーをVoicevoxError形式に変換して例外をスロー
- */
-export function throwVoicevoxError(
-  message: string,
-  code: VoicevoxErrorCode = VoicevoxErrorCode.UNKNOWN_ERROR,
-  originalError?: unknown
-): never {
-  console.error(`[${code}] ${message}`, originalError)
-  throw new VoicevoxError(message, code, originalError)
-}
-
-/**
- * APIエラーを処理
- */
-export function handleApiError(message: string, error: unknown): never {
-  return throwVoicevoxError(message, VoicevoxErrorCode.API_CONNECTION_ERROR, error)
-}
-
-/**
- * 音声合成エラーを処理
- */
-export function handleSynthesisError(message: string, error: unknown): never {
-  return throwVoicevoxError(message, VoicevoxErrorCode.SYNTHESIS_ERROR, error)
-}
-
-/**
- * ファイル操作エラーを処理
- */
-export function handleFileError(message: string, error: unknown): never {
-  return throwVoicevoxError(message, VoicevoxErrorCode.FILE_OPERATION_ERROR, error)
 }

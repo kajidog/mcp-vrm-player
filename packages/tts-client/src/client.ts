@@ -3,42 +3,11 @@ import type { TtsEngine } from './engines/types.js'
 import { handleError } from './error.js'
 import { AudioFileManager } from './services/file-manager.js'
 import { SpeechService } from './services/speech-service.js'
-import type { SpeechServiceSpeakOptions } from './services/speech-service.js'
-import type { AudioQuery, PlaybackOptions, TtsConfig } from './types.js'
-
-/**
- * 話者オプション（統一API用）
- */
-export interface SpeakOptions extends SpeechServiceSpeakOptions {}
-
-/**
- * 環境変数から再生オプションを読み取る関数
- */
-function getPlaybackOptionsFromEnv(): PlaybackOptions {
-  if (typeof process === 'undefined' || !process.env) {
-    return {}
-  }
-
-  const immediate = process.env.TTS_DEFAULT_IMMEDIATE
-  const waitForStart = process.env.TTS_DEFAULT_WAIT_FOR_START
-  const waitForEnd = process.env.TTS_DEFAULT_WAIT_FOR_END
-
-  return {
-    immediate:
-      immediate !== undefined && (immediate === 'true' || immediate === 'false') ? immediate === 'true' : undefined,
-    waitForStart:
-      waitForStart !== undefined && (waitForStart === 'true' || waitForStart === 'false')
-        ? waitForStart === 'true'
-        : undefined,
-    waitForEnd:
-      waitForEnd !== undefined && (waitForEnd === 'true' || waitForEnd === 'false') ? waitForEnd === 'true' : undefined,
-  }
-}
+import type { AudioQuery, TtsConfig } from './types.js'
 
 export class TtsClient {
   private readonly engine: TtsEngine
   private readonly fileManager: AudioFileManager
-  private readonly defaultPlaybackOptions: PlaybackOptions
   private readonly speechService: SpeechService
 
   constructor(config: TtsConfig) {
@@ -46,26 +15,6 @@ export class TtsClient {
 
     const defaultSpeaker = config.defaultSpeaker ?? 1
     const defaultSpeedScale = config.defaultSpeedScale ?? 1.0
-
-    const envOptions = getPlaybackOptionsFromEnv()
-    this.defaultPlaybackOptions = {
-      immediate: true,
-      waitForStart: false,
-      waitForEnd: false,
-    }
-
-    if (config.defaultPlaybackOptions) {
-      Object.assign(this.defaultPlaybackOptions, config.defaultPlaybackOptions)
-    }
-    if (envOptions.immediate !== undefined) {
-      this.defaultPlaybackOptions.immediate = envOptions.immediate
-    }
-    if (envOptions.waitForStart !== undefined) {
-      this.defaultPlaybackOptions.waitForStart = envOptions.waitForStart
-    }
-    if (envOptions.waitForEnd !== undefined) {
-      this.defaultPlaybackOptions.waitForEnd = envOptions.waitForEnd
-    }
 
     this.engine =
       config.ttsEngine ??
@@ -84,8 +33,6 @@ export class TtsClient {
       defaultPitchScale: config.defaultPitchScale,
       defaultPrePhonemeLength: config.defaultPrePhonemeLength,
       defaultPostPhonemeLength: config.defaultPostPhonemeLength,
-      defaultPlaybackOptions: this.defaultPlaybackOptions,
-      maxSegmentLength: config.maxSegmentLength ?? 150,
     })
   }
 

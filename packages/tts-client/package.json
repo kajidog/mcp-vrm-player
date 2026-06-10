@@ -14,8 +14,7 @@
     "node:fs/promises": false,
     "node:path": false,
     "node:os": false,
-    "node:child_process": false,
-    "./dist/playback/node-playback-strategy.js": false
+    "node:child_process": false
   },
   "types": "./dist/index.d.ts",
   "exports": {

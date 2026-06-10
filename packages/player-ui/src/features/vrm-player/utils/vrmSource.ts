@@ -1,4 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
+import { base64ToArrayBuffer } from '~/lib/binary'
 import type { VrmPayload, VrmSource } from '../types'
 import { isRecord, readString } from './vrmPayload'
 
@@ -11,15 +12,6 @@ export interface ResolvedVrmSource {
 
 interface ResolveOptions {
   isDefault?: boolean
-}
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return bytes.buffer
 }
 
 // iframe からそのまま `<img>` や fetch で読める URL かどうかの粗い判定。
