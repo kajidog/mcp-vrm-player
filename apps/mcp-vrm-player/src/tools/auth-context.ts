@@ -7,7 +7,11 @@ const sessionUsers = new Map<string, string>()
 export function resolveUserId(extra?: ToolHandlerExtra): string {
   const authenticatedUserId = resolveAuthenticatedUserId(extra)
   if (authenticatedUserId) {
-    bindSessionUser(extra?.sessionId, authenticatedUserId)
+    // 既存の束縛は上書きしない（first-bind-wins）。別の主体が同じセッションIDで
+    // リクエストしてもセッションの所有者を奪えないようにする
+    if (!getSessionUser(extra?.sessionId)) {
+      bindSessionUser(extra?.sessionId, authenticatedUserId)
+    }
     return authenticatedUserId
   }
 

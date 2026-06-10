@@ -33,6 +33,8 @@ export async function verifyAccessToken(
     const { payload } = await jwtVerify(token, JWKS, {
       issuer,
       audience,
+      // JWKS 由来の非対称鍵のみを許可（対称鍵によるアルゴリズム混同を防ぐ）
+      algorithms: ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512', 'EdDSA'],
     })
     const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : []
     const missingScope = requiredScopes.find((scope) => !scopes.includes(scope))

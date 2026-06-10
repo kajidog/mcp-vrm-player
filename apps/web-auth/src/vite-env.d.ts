@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY: string
   readonly VITE_AUTH_MODE?: 'local' | 'supabase'
   readonly VITE_LOCAL_AUTH_SERVER?: string
+  readonly VITE_ALLOWED_REDIRECT_ORIGINS?: string
 }
 
 interface ImportMeta {
