@@ -230,7 +230,7 @@ export function registerVrmPublicTools(
           name: model.name,
           speakerId: model.speakerId,
           isDefault: model.ownerUserId === visibility.userId && model.isDefault,
-          vrmUrl: getVrmModelUrl(config, model.id),
+          vrmUrl: getVrmModelUrl(config, model.id, { userId: visibility.userId }),
           vrmSizeBytes: model.vrmSizeBytes,
           updatedAt: model.updatedAt,
           emotionBindings: model.emotionBindings,

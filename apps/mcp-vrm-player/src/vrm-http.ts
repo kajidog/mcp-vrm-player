@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import type { ServerConfig } from './config.js'
-import { resolveUserId } from './tools/auth-context.js'
+import { ANONYMOUS_USER_ID, resolveUserId } from './tools/auth-context.js'
 import type { PlayerSettingsStore } from './tools/player/player-settings-store.js'
 import type { PoseRegistryStore } from './tools/pose-registry/store.js'
 import type { PoseResource } from './tools/pose-registry/types.js'
@@ -141,7 +141,8 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
 }
 
 function withAssetToken(url: string, kind: 'vrm' | 'pose', id: string, userId?: string): string {
-  if (!userId) return url
+  // 匿名所有の資産はトークンなしで可視なので発行しない
+  if (!userId || userId === ANONYMOUS_USER_ID) return url
   const token = createAssetToken(kind, id, userId)
   return `${url}?token=${encodeURIComponent(token)}`
 }

@@ -235,7 +235,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                   id: model.id,
                   name: model.name,
                   speakerId: model.speakerId,
-                  vrmUrl: getVrmModelUrl(config, model.id),
+                  vrmUrl: getVrmModelUrl(config, model.id, { userId }),
                   emotionBindings: model.emotionBindings ?? [],
                   poses: (model.poses ?? []).flatMap((attachment) => {
                     if (isBuiltinPoseResourceId(attachment.poseId)) {
@@ -252,7 +252,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
           content: [
             {
               type: 'text',
-              text: `TTS Player started. viewUUID: ${viewUUID} 「${textPreview}」\nNext: tts_resynthesize_player (edit a track) | tts_get_player_state (inspect state)`,
+              text: `VRM Player started. viewUUID: ${viewUUID} 「${textPreview}」\nNext: vrm_speak_player (speak again) | vrm_find_models (look up models/poses) | vrm_set_default_model (change default)`,
             },
           ],
           structuredContent: structured,

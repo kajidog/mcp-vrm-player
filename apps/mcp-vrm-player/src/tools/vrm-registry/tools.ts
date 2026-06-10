@@ -262,7 +262,7 @@ export function registerVrmRegistryTools(
               type: 'text',
               text: JSON.stringify({
                 vrm: toMetadataPayload(model, userId),
-                vrmUrl: getVrmModelUrl(config, model.id),
+                vrmUrl: getVrmModelUrl(config, model.id, { userId }),
               }),
             },
           ],
