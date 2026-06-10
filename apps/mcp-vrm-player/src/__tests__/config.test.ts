@@ -33,69 +33,19 @@ describe('config module', () => {
       expect(result.defaultSpeedScale).toBe(1.5)
     })
 
-    it('--immediate を正しくパースする', () => {
-      const result = parseCliArgs(['--immediate'])
-      expect(result.defaultImmediate).toBe(true)
+    it('--auto-play を正しくパースする', () => {
+      const result = parseCliArgs(['--auto-play'])
+      expect(result.autoPlay).toBe(true)
     })
 
-    it('--no-immediate を正しくパースする', () => {
-      const result = parseCliArgs(['--no-immediate'])
-      expect(result.defaultImmediate).toBe(false)
-    })
-
-    it('--wait-for-start を正しくパースする', () => {
-      const result = parseCliArgs(['--wait-for-start'])
-      expect(result.defaultWaitForStart).toBe(true)
-    })
-
-    it('--no-wait-for-start を正しくパースする', () => {
-      const result = parseCliArgs(['--no-wait-for-start'])
-      expect(result.defaultWaitForStart).toBe(false)
-    })
-
-    it('--wait-for-end を正しくパースする', () => {
-      const result = parseCliArgs(['--wait-for-end'])
-      expect(result.defaultWaitForEnd).toBe(true)
-    })
-
-    it('--no-wait-for-end を正しくパースする', () => {
-      const result = parseCliArgs(['--no-wait-for-end'])
-      expect(result.defaultWaitForEnd).toBe(false)
-    })
-
-    it('--player-export を正しくパースする', () => {
-      const result = parseCliArgs(['--player-export'])
-      expect(result.playerExportEnabled).toBe(true)
-    })
-
-    it('--no-player-export を正しくパースする', () => {
-      const result = parseCliArgs(['--no-player-export'])
-      expect(result.playerExportEnabled).toBe(false)
-    })
-
-    it('--player-export-dir を正しくパースする', () => {
-      const result = parseCliArgs(['--player-export-dir', '/tmp/my-exports'])
-      expect(result.playerExportDir).toBe('/tmp/my-exports')
+    it('--no-auto-play を正しくパースする', () => {
+      const result = parseCliArgs(['--no-auto-play'])
+      expect(result.autoPlay).toBe(false)
     })
 
     it('--player-state-file を正しくパースする', () => {
       const result = parseCliArgs(['--player-state-file', '/tmp/player-state.json'])
       expect(result.playerStateFile).toBe('/tmp/player-state.json')
-    })
-
-    it('--restrict-immediate を正しくパースする', () => {
-      const result = parseCliArgs(['--restrict-immediate'])
-      expect(result.restrictImmediate).toBe(true)
-    })
-
-    it('--restrict-wait-for-start を正しくパースする', () => {
-      const result = parseCliArgs(['--restrict-wait-for-start'])
-      expect(result.restrictWaitForStart).toBe(true)
-    })
-
-    it('--restrict-wait-for-end を正しくパースする', () => {
-      const result = parseCliArgs(['--restrict-wait-for-end'])
-      expect(result.restrictWaitForEnd).toBe(true)
     })
 
     it('--disable-tools を正しくパースする', () => {
@@ -167,16 +117,14 @@ describe('config module', () => {
         'http://example.com:50021',
         '--speaker',
         '5',
-        '--immediate',
-        '--restrict-wait-for-end',
+        '--no-auto-play',
         '--http',
         '--port',
         '3001',
       ])
       expect(result.baseUrl).toBe('http://example.com:50021')
       expect(result.defaultSpeaker).toBe(5)
-      expect(result.defaultImmediate).toBe(true)
-      expect(result.restrictWaitForEnd).toBe(true)
+      expect(result.autoPlay).toBe(false)
       expect(result.httpMode).toBe(true)
       expect(result.httpPort).toBe(3001)
     })
@@ -209,49 +157,19 @@ describe('config module', () => {
       expect(result.defaultSpeedScale).toBe(1.5)
     })
 
-    it('TTS_DEFAULT_IMMEDIATE=false で false を返す', () => {
-      const result = parseEnvVars({ TTS_DEFAULT_IMMEDIATE: 'false' })
-      expect(result.defaultImmediate).toBe(false)
+    it('TTS_AUTO_PLAY=false で false を返す', () => {
+      const result = parseEnvVars({ TTS_AUTO_PLAY: 'false' })
+      expect(result.autoPlay).toBe(false)
     })
 
-    it('TTS_DEFAULT_IMMEDIATE=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_DEFAULT_IMMEDIATE: 'true' })
-      expect(result.defaultImmediate).toBe(true)
+    it('TTS_AUTO_PLAY=true で true を返す', () => {
+      const result = parseEnvVars({ TTS_AUTO_PLAY: 'true' })
+      expect(result.autoPlay).toBe(true)
     })
 
-    it('TTS_DEFAULT_WAIT_FOR_START=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_DEFAULT_WAIT_FOR_START: 'true' })
-      expect(result.defaultWaitForStart).toBe(true)
-    })
-
-    it('TTS_DEFAULT_WAIT_FOR_END=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_DEFAULT_WAIT_FOR_END: 'true' })
-      expect(result.defaultWaitForEnd).toBe(true)
-    })
-
-    it('TTS_RESTRICT_IMMEDIATE=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_RESTRICT_IMMEDIATE: 'true' })
-      expect(result.restrictImmediate).toBe(true)
-    })
-
-    it('TTS_RESTRICT_WAIT_FOR_START=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_RESTRICT_WAIT_FOR_START: 'true' })
-      expect(result.restrictWaitForStart).toBe(true)
-    })
-
-    it('TTS_RESTRICT_WAIT_FOR_END=true で true を返す', () => {
-      const result = parseEnvVars({ TTS_RESTRICT_WAIT_FOR_END: 'true' })
-      expect(result.restrictWaitForEnd).toBe(true)
-    })
-
-    it('TTS_PLAYER_EXPORT_ENABLED=false で false を返す', () => {
-      const result = parseEnvVars({ TTS_PLAYER_EXPORT_ENABLED: 'false' })
-      expect(result.playerExportEnabled).toBe(false)
-    })
-
-    it('TTS_PLAYER_EXPORT_DIR を正しく読み込む', () => {
-      const result = parseEnvVars({ TTS_PLAYER_EXPORT_DIR: '/tmp/exports' })
-      expect(result.playerExportDir).toBe('/tmp/exports')
+    it('TTS_PLAYER_CACHE_DIR を正しく読み込む', () => {
+      const result = parseEnvVars({ TTS_PLAYER_CACHE_DIR: '/tmp/cache' })
+      expect(result.playerCacheDir).toBe('/tmp/cache')
     })
 
     it('TTS_PLAYER_STATE_FILE を正しく読み込む', () => {
@@ -324,10 +242,10 @@ describe('config module', () => {
     it('空の文字列環境変数はスキップする', () => {
       const result = parseEnvVars({
         TTS_BASE_URL: '',
-        TTS_PLAYER_EXPORT_DIR: '',
+        TTS_PLAYER_CACHE_DIR: '',
       })
       expect(result.baseUrl).toBeUndefined()
-      expect(result.playerExportDir).toBeUndefined()
+      expect(result.playerCacheDir).toBeUndefined()
     })
   })
 
@@ -341,14 +259,7 @@ describe('config module', () => {
       expect(result.baseUrl).toBe('http://localhost:50021')
       expect(result.defaultSpeaker).toBe(1)
       expect(result.defaultSpeedScale).toBe(1.0)
-      expect(result.defaultImmediate).toBe(true)
-      expect(result.defaultWaitForStart).toBe(false)
-      expect(result.defaultWaitForEnd).toBe(false)
-      expect(result.restrictImmediate).toBe(false)
-      expect(result.restrictWaitForStart).toBe(false)
-      expect(result.restrictWaitForEnd).toBe(false)
-      expect(result.playerExportEnabled).toBe(true)
-      expect(result.playerExportDir).toContain('tts-player-exports')
+      expect(result.autoPlay).toBe(true)
       expect(result.playerCacheDir).toContain('.tts-player-cache')
       expect(result.playerStateFile).toContain('.tts-player-cache/player-state.json')
       expect(result.disabledTools).toEqual([])
@@ -386,18 +297,8 @@ describe('config module', () => {
     })
 
     it('CLI引数がデフォルト値を上書きする', () => {
-      const result = getConfig(['--no-immediate', '--wait-for-end'], {})
-      expect(result.defaultImmediate).toBe(false)
-      expect(result.defaultWaitForEnd).toBe(true)
-    })
-
-    it('player export の優先順位: CLI > ENV > デフォルト', () => {
-      const result = getConfig(['--no-player-export', '--player-export-dir', '/tmp/cli-exports'], {
-        TTS_PLAYER_EXPORT_ENABLED: 'true',
-        TTS_PLAYER_EXPORT_DIR: '/tmp/env-exports',
-      })
-      expect(result.playerExportEnabled).toBe(false)
-      expect(result.playerExportDir).toBe('/tmp/cli-exports')
+      const result = getConfig(['--no-auto-play'], {})
+      expect(result.autoPlay).toBe(false)
     })
 
     it('player state file 未指定時は player cache dir に追従する', () => {
@@ -423,15 +324,6 @@ describe('config module', () => {
       expect(result.baseUrl).toBe('http://env.example.com:50021')
       // 両方ないのでデフォルト値
       expect(result.defaultSpeedScale).toBe(1.0)
-    })
-
-    it('制限設定が正しく設定される', () => {
-      const result = getConfig(['--restrict-immediate', '--restrict-wait-for-start'], {
-        TTS_RESTRICT_WAIT_FOR_END: 'true',
-      })
-      expect(result.restrictImmediate).toBe(true)
-      expect(result.restrictWaitForStart).toBe(true)
-      expect(result.restrictWaitForEnd).toBe(true)
     })
 
     it('無効化ツールが正しく設定される', () => {
@@ -484,17 +376,17 @@ describe('config module', () => {
 
     it('boolean値を正しくパースする', () => {
       const configPath = join(tmpDir, 'bool-config.json')
-      writeFileSync(configPath, JSON.stringify({ immediate: false, 'wait-for-end': true }))
+      writeFileSync(configPath, JSON.stringify({ 'auto-play': false, 'player-audio-cache': true }))
       const result = parseConfigFile(configPath)
-      expect(result.defaultImmediate).toBe(false)
-      expect(result.defaultWaitForEnd).toBe(true)
+      expect(result.autoPlay).toBe(false)
+      expect(result.playerAudioCacheEnabled).toBe(true)
     })
 
     it('camelCaseキーを受け入れる', () => {
       const configPath = join(tmpDir, 'camel-config.json')
-      writeFileSync(configPath, JSON.stringify({ useStreaming: true, autoPlay: false }))
+      writeFileSync(configPath, JSON.stringify({ playerAudioCacheEnabled: true, autoPlay: false }))
       const result = parseConfigFile(configPath)
-      expect(result.useStreaming).toBe(true)
+      expect(result.playerAudioCacheEnabled).toBe(true)
       expect(result.autoPlay).toBe(false)
     })
 
@@ -525,13 +417,11 @@ describe('config module', () => {
       writeFileSync(
         configPath,
         JSON.stringify({
-          'player-export-dir': '',
           'player-cache-dir': '',
           'player-state-file': '',
         })
       )
       const result = parseConfigFile(configPath)
-      expect(result.playerExportDir).toBeUndefined()
       expect(result.playerCacheDir).toBeUndefined()
       expect(result.playerStateFile).toBeUndefined()
     })
@@ -586,7 +476,7 @@ describe('config module', () => {
     it('グループごとに整理されている', () => {
       const help = getHelpText()
       expect(help).toContain('TTS Configuration:')
-      expect(help).toContain('Playback Options:')
+      expect(help).toContain('UI Player Options:')
       expect(help).toContain('Server Options:')
     })
 
@@ -601,7 +491,6 @@ describe('config module', () => {
     it('デフォルトが未定義のオプションはテンプレートに含まれない', () => {
       const template = getConfigTemplate()
       // ランタイムデフォルトを持つパスオプションは含まれない
-      expect(template).not.toHaveProperty('player-export-dir')
       expect(template).not.toHaveProperty('player-cache-dir')
       expect(template).not.toHaveProperty('player-state-file')
       // configFile は除外済み
@@ -613,7 +502,7 @@ describe('config module', () => {
       expect(template).toHaveProperty('engine', 'voicevox')
       expect(template).toHaveProperty('speaker', 1)
       expect(template).toHaveProperty('speed', 1.0)
-      expect(template).toHaveProperty('immediate', true)
+      expect(template).toHaveProperty('auto-play', true)
       expect(template).not.toHaveProperty('api-key')
       expect(template).not.toHaveProperty('engine-api-key')
     })

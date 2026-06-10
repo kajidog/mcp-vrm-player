@@ -4,8 +4,8 @@ import { Readable } from 'node:stream'
 import type { ServerConfig } from './config.js'
 import { ANONYMOUS_USER_ID, resolveUserId } from './tools/auth-context.js'
 import type { PlayerSettingsStore } from './tools/player/player-settings-store.js'
+import { getReadablePose } from './tools/pose-registry/store.js'
 import type { PoseRegistryStore } from './tools/pose-registry/store.js'
-import type { PoseResource } from './tools/pose-registry/types.js'
 import type { VrmRegistryStore } from './tools/vrm-registry/store.js'
 
 const VRM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -120,7 +120,9 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
     if (assetToken && !tokenUserId) return c.text('Not found', 404)
     const userId = tokenUserId ?? resolveUserId({ authInfo: c.get?.('auth') })
     const settings = stores?.playerSettings.applyDefaults({}, userId)
-    const pose = stores ? getReadablePose(stores, poseId, userId, settings?.usePublicVrms ?? true) : undefined
+    const pose = stores
+      ? getReadablePose(stores.poseRegistry, stores.vrmRegistry, poseId, userId, settings?.usePublicVrms ?? true)
+      : undefined
     const filePath = pose?.vrmaFilePath
     if (!filePath || !existsSync(filePath)) {
       return c.text('Not found', 404)
@@ -171,20 +173,4 @@ function cleanupExpiredAssetTokens(): void {
   for (const [token, grant] of ASSET_TOKEN_GRANTS) {
     if (grant.exp < now) ASSET_TOKEN_GRANTS.delete(token)
   }
-}
-
-function getReadablePose(
-  stores: VrmHttpStores,
-  poseId: string,
-  userId: string,
-  usePublicVrms: boolean
-): PoseResource | undefined {
-  const pose = stores.poseRegistry.get(poseId)
-  if (!pose) return undefined
-  if (pose.ownerUserId === userId) return pose
-  if (!usePublicVrms) return undefined
-  const referencedByPublicVrm = stores.vrmRegistry
-    .listVisible({ userId, usePublicVrms })
-    .some((model) => model.isPublic && model.poses?.some((attachment) => attachment.poseId === poseId))
-  return referencedByPublicVrm ? pose : undefined
 }

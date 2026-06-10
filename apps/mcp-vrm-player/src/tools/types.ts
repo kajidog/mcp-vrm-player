@@ -18,8 +18,3 @@ export interface ToolDeps {
   config: ServerConfig
   disabledTools: Set<string>
 }
-
-// Player ツール固有の依存
-export interface PlayerToolDeps extends ToolDeps {
-  playerEngine: TtsEngine
-}

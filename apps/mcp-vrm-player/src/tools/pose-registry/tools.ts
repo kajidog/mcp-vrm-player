@@ -7,6 +7,7 @@ import { registerAppToolIfEnabled } from '../registration.js'
 import type { ToolHandlerExtra } from '../types.js'
 import { createErrorResponse } from '../utils.js'
 import type { VrmRegistryStore } from '../vrm-registry/store.js'
+import { getReadablePose } from './store.js'
 import type { PoseRegistryStore } from './store.js'
 import { BUILTIN_POSE_IDS, isBuiltinPoseResourceId, toBuiltinPoseResourceId } from './types.js'
 import type { PoseResource } from './types.js'
@@ -204,23 +205,6 @@ export function registerPoseRegistryTools(
       }
     }
   )
-}
-
-function getReadablePose(
-  poseRegistry: PoseRegistryStore,
-  vrmRegistry: VrmRegistryStore,
-  poseId: string,
-  userId: string,
-  usePublicVrms: boolean
-): PoseResource | undefined {
-  const pose = poseRegistry.get(poseId)
-  if (!pose) return undefined
-  if (pose.ownerUserId === userId) return pose
-  if (!usePublicVrms) return undefined
-  const referencedByPublicVrm = vrmRegistry
-    .listVisible({ userId, usePublicVrms })
-    .some((model) => model.isPublic && model.poses?.some((attachment) => attachment.poseId === poseId))
-  return referencedByPublicVrm ? pose : undefined
 }
 
 function listReadableCustomPoses(

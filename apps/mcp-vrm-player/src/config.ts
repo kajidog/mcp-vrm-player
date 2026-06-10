@@ -80,61 +80,6 @@ const ttsConfigDefs: ConfigDefs = {
     type: 'number',
     valueName: '<seconds>',
   },
-  defaultImmediate: {
-    cli: '--immediate',
-    env: 'TTS_DEFAULT_IMMEDIATE',
-    description: 'Enable immediate playback',
-    group: 'Playback Options',
-    type: 'boolean',
-    default: true,
-  },
-  defaultWaitForStart: {
-    cli: '--wait-for-start',
-    env: 'TTS_DEFAULT_WAIT_FOR_START',
-    description: 'Enable waiting until playback starts by default',
-    group: 'Playback Options',
-    type: 'boolean',
-    default: false,
-  },
-  defaultWaitForEnd: {
-    cli: '--wait-for-end',
-    env: 'TTS_DEFAULT_WAIT_FOR_END',
-    description: 'Enable waiting until playback ends by default',
-    group: 'Playback Options',
-    type: 'boolean',
-    default: false,
-  },
-  restrictImmediate: {
-    cli: '--restrict-immediate',
-    env: 'TTS_RESTRICT_IMMEDIATE',
-    description: 'Restrict immediate playback option',
-    group: 'Playback Restrictions',
-    type: 'boolean',
-    default: false,
-  },
-  restrictWaitForStart: {
-    cli: '--restrict-wait-for-start',
-    env: 'TTS_RESTRICT_WAIT_FOR_START',
-    description: 'Restrict wait-for-start option',
-    group: 'Playback Restrictions',
-    type: 'boolean',
-    default: false,
-  },
-  restrictWaitForEnd: {
-    cli: '--restrict-wait-for-end',
-    env: 'TTS_RESTRICT_WAIT_FOR_END',
-    description: 'Restrict wait-for-end option',
-    group: 'Playback Restrictions',
-    type: 'boolean',
-    default: false,
-  },
-  useStreaming: {
-    cli: '--use-streaming',
-    env: 'TTS_USE_STREAMING',
-    description: 'Enable streaming synthesis when supported',
-    group: 'Playback Options',
-    type: 'boolean',
-  },
   disabledTools: {
     cli: '--disable-tools',
     env: 'TTS_DISABLED_TOOLS',
@@ -161,22 +106,6 @@ const ttsConfigDefs: ConfigDefs = {
     group: 'UI Player Options',
     type: 'boolean',
     default: true,
-  },
-  playerExportEnabled: {
-    cli: '--player-export',
-    env: 'TTS_PLAYER_EXPORT_ENABLED',
-    description: 'Enable exporting generated player audio',
-    group: 'UI Player Options',
-    type: 'boolean',
-    default: true,
-  },
-  playerExportDir: {
-    cli: '--player-export-dir',
-    env: 'TTS_PLAYER_EXPORT_DIR',
-    description: 'Player audio export directory',
-    group: 'UI Player Options',
-    type: 'string',
-    valueName: '<dir>',
   },
   playerCacheDir: {
     cli: '--player-cache-dir',
@@ -264,18 +193,10 @@ export interface ServerConfig extends BaseServerConfig {
   defaultSpeedScale: number
   defaultPrePhonemeLength?: number
   defaultPostPhonemeLength?: number
-  defaultWaitForStart: boolean
-  defaultWaitForEnd: boolean
-  restrictImmediate: boolean
-  restrictWaitForStart: boolean
-  restrictWaitForEnd: boolean
-  useStreaming?: boolean
 
   // UIプレイヤー設定
   playerDomain: string
   autoPlay: boolean
-  playerExportEnabled: boolean
-  playerExportDir: string
   playerCacheDir: string
   playerStateFile: string
   playerAudioCacheEnabled: boolean
@@ -291,7 +212,6 @@ export interface ServerConfig extends BaseServerConfig {
 // パスのデフォルト値（process.cwd()依存のため関数で生成）
 function getPathDefaults() {
   return {
-    playerExportDir: join(process.cwd(), 'tts-player-exports'),
     playerCacheDir: join(process.cwd(), '.tts-player-cache'),
     playerStateFile: join(process.cwd(), '.tts-player-cache', 'player-state.json'),
   }

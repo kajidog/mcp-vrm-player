@@ -1,5 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect, useMemo, useState } from 'react'
+import { arrayBufferToBase64 } from '~/lib/binary'
 import { VRMCanvas } from '../vrm-player/components/VRMCanvas'
 import type { VrmSource } from '../vrm-player/types'
 import type { RegisterPoseRequest } from './hooks/usePoseRegistry'
@@ -15,16 +16,6 @@ interface PoseRegisterModalProps {
   onClose: () => void
   onRegister: (input: RegisterPoseRequest) => Promise<PoseMetadata>
   onSaved?: (pose: PoseMetadata) => void
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  const chunkSize = 0x8000
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
-  }
-  return btoa(binary)
 }
 
 function idFromFileName(fileName: string): string {

@@ -1,5 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { arrayBufferToBase64 } from '~/lib/binary'
+import { parseToolJson } from '~/lib/toolJson'
 import { EMOTION_NAMES, type EmotionBinding } from '../emotions'
 import { usePoseRegistry } from '../poses/hooks/usePoseRegistry'
 import { DEFAULT_POSE_ID, POSE_PRESETS } from '../poses/presets'
@@ -20,8 +22,6 @@ import { useSpeakers } from './hooks/useSpeakers'
 import { useTestSpeakPlayer } from './hooks/useTestSpeakPlayer'
 import { useVrmRegistry } from './hooks/useVrmRegistry'
 import type { VrmMetadata } from './types'
-import { arrayBufferToBase64 } from './utils/binary'
-import { parseToolJson } from './utils/toolJson'
 
 interface VrmRegisterViewProps {
   app: App

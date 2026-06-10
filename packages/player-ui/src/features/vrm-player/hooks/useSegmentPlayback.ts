@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PoseSource } from '~/features/poses/types'
+import { base64ToBlobUrl } from '~/lib/binary'
 import type { VrmPlayerState } from '../types'
 import type { PoseSegment } from '../utils/vrmPayload'
 import type { LipSyncController } from './useLipSync'
@@ -9,13 +10,6 @@ interface UseSegmentPlaybackOptions {
   resolvePose: (poseName: string | undefined) => PoseSource | null
   resolveExpression: (segment: PoseSegment | null) => VrmPlayerState['expression']
   onError: (message: string) => void
-}
-
-function base64ToBlobUrl(base64: string, mimeType: string): string {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-  return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
 }
 
 export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, onError }: UseSegmentPlaybackOptions) {

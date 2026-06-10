@@ -1,7 +1,4 @@
-export {
-  TtsClient,
-  type SpeakOptions,
-} from './client.js'
+export { TtsClient } from './client.js'
 export * from './types.js'
 export * from './engines/index.js'
 export * from './utils.js'

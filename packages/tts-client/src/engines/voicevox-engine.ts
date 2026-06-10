@@ -65,18 +65,6 @@ export class VoicevoxEngine implements TtsEngine {
     }
   }
 
-  public async generateQueryFromPreset(text: string, presetId: number, coreVersion?: string): Promise<AudioQuery> {
-    try {
-      let endpoint = `/audio_query_from_preset?text=${encodeURIComponent(text)}&preset_id=${encodeURIComponent(
-        presetId.toString()
-      )}`
-      if (coreVersion) endpoint += `&core_version=${encodeURIComponent(coreVersion)}`
-      return await this.http.request<AudioQuery>('post', endpoint, null, { 'Content-Type': 'application/json' })
-    } catch (error) {
-      throw handleError('プリセットを使用した音声クエリ生成中にエラーが発生しました', error)
-    }
-  }
-
   public async getSpeakers(): Promise<Speaker[]> {
     try {
       return await this.http.request<Speaker[]>('get', '/speakers', null, { 'Content-Type': 'application/json' })

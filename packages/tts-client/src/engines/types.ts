@@ -57,9 +57,3 @@ export interface TtsEngine {
   updateUserDictionaryWord(input: DictionaryWordUpdateInput): Promise<void>
   deleteUserDictionaryWord(wordUuid: string): Promise<void>
 }
-
-export function assertCapability(engine: TtsEngine, capability: keyof EngineCapabilities, featureLabel: string): void {
-  if (!engine.capabilities[capability]) {
-    throw new Error(`${featureLabel} is not supported by ${engine.displayName}`)
-  }
-}
