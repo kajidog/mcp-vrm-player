@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import type { Stats } from 'node:fs'
-import { readdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { readFile, readdir, stat, unlink, utimes } from 'node:fs/promises'
+import { join } from 'node:path'
 import { type AccentPhrase, type AudioQuery, planAudioCacheCleanup, resolveAudioCachePolicy } from '@kajidog/tts-client'
+import { writeBinaryAtomic } from '../persistence.js'
 import type { ToolDeps } from '../types.js'
 
 // ---------------------------------------------------------------------------
@@ -11,9 +12,13 @@ import type { ToolDeps } from '../types.js'
 // ---------------------------------------------------------------------------
 
 const AUDIO_CACHE_FILE_PATTERN = /^[a-f0-9]{64}\.txt$/
+const AUDIO_CACHE_QUERY_FILE_PATTERN = /^[a-f0-9]{64}\.query\.json$/
 const DEFAULT_AUDIO_CACHE_TTL_DAYS = 30
 const DEFAULT_AUDIO_CACHE_MAX_MB = 512
 const AUDIO_CACHE_CLEANUP_EVERY_WRITES = 20
+// メモリキャッシュの上限。ディスクキャッシュ無効時でも無制限に成長しないようにする。
+const MEM_CACHE_MAX_BYTES = 64 * 1024 * 1024
+const MEM_QUERY_MAX_ENTRIES = 200
 
 // ---------------------------------------------------------------------------
 // AudioCacheStore
@@ -21,7 +26,10 @@ const AUDIO_CACHE_CLEANUP_EVERY_WRITES = 20
 
 export class AudioCacheStore {
   private dir: string
+  // 挿入順 = LRU 順として使う（ヒット時に再挿入して末尾へ移動）。
   private readonly mem = new Map<string, string>()
+  private memBytes = 0
+  private readonly memQuery = new Map<string, AudioQuery>()
 
   private isDiskEnabled: boolean
   private ttlMs: number | null
@@ -61,16 +69,29 @@ export class AudioCacheStore {
     return this.dir
   }
 
-  readCachedBase64(cacheKey: string): string | null {
+  private audioPath(cacheKey: string): string {
+    return join(this.dir, `${cacheKey}.txt`)
+  }
+
+  private queryPath(cacheKey: string): string {
+    return join(this.dir, `${cacheKey}.query.json`)
+  }
+
+  async readCachedBase64(cacheKey: string): Promise<string | null> {
     const inMemory = this.mem.get(cacheKey)
-    if (inMemory) return inMemory
+    if (inMemory !== undefined) {
+      // LRU: ヒットしたエントリを末尾（最新）へ移動する。
+      this.mem.delete(cacheKey)
+      this.mem.set(cacheKey, inMemory)
+      return inMemory
+    }
     if (!this.isDiskEnabled) return null
 
-    const filePath = join(this.dir, `${cacheKey}.txt`)
     try {
-      const base64 = readFileSync(filePath, 'utf-8').trim()
+      const base64 = (await readFile(this.audioPath(cacheKey), 'utf-8')).trim()
       if (base64.length > 0) {
-        this.mem.set(cacheKey, base64)
+        this.memSet(cacheKey, base64)
+        this.touchForEviction(cacheKey)
         return base64
       }
     } catch {
@@ -80,15 +101,81 @@ export class AudioCacheStore {
   }
 
   async writeCachedBase64(cacheKey: string, base64: string): Promise<void> {
-    this.mem.set(cacheKey, base64)
+    this.memSet(cacheKey, base64)
     if (!this.isDiskEnabled) return
-    const filePath = join(this.dir, `${cacheKey}.txt`)
     try {
-      await writeFile(filePath, base64, 'utf-8')
+      await writeBinaryAtomic(this.audioPath(cacheKey), Buffer.from(base64, 'utf-8'))
       this.scheduleCleanup()
     } catch (error) {
       console.warn('Warning: failed to write TTS player cache:', error)
     }
+  }
+
+  /**
+   * キャッシュ音声を生成した AudioQuery をサイドカー保存する。
+   * キャッシュヒット時にエンジンへ往復せずに済むようにするためのもので、失敗しても致命的ではない。
+   */
+  async writeCachedQuery(cacheKey: string, query: AudioQuery): Promise<void> {
+    this.memQuerySet(cacheKey, query)
+    if (!this.isDiskEnabled) return
+    try {
+      await writeBinaryAtomic(this.queryPath(cacheKey), Buffer.from(JSON.stringify(query), 'utf-8'))
+    } catch (error) {
+      console.warn('Warning: failed to write TTS player query cache:', error)
+    }
+  }
+
+  async readCachedQuery(cacheKey: string): Promise<AudioQuery | null> {
+    const inMemory = this.memQuery.get(cacheKey)
+    if (inMemory) return inMemory
+    if (!this.isDiskEnabled) return null
+    try {
+      const query = JSON.parse(await readFile(this.queryPath(cacheKey), 'utf-8')) as AudioQuery
+      this.memQuerySet(cacheKey, query)
+      return query
+    } catch {
+      return null
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // In-memory LRU
+  // -------------------------------------------------------------------------
+
+  private memSet(cacheKey: string, base64: string): void {
+    this.memDelete(cacheKey)
+    this.mem.set(cacheKey, base64)
+    this.memBytes += base64.length
+    while (this.memBytes > MEM_CACHE_MAX_BYTES && this.mem.size > 0) {
+      const oldestKey = this.mem.keys().next().value
+      if (oldestKey === undefined) break
+      this.memDelete(oldestKey)
+    }
+  }
+
+  private memDelete(cacheKey: string): void {
+    const existing = this.mem.get(cacheKey)
+    if (existing !== undefined) {
+      this.memBytes -= existing.length
+      this.mem.delete(cacheKey)
+    }
+  }
+
+  private memQuerySet(cacheKey: string, query: AudioQuery): void {
+    this.memQuery.delete(cacheKey)
+    this.memQuery.set(cacheKey, query)
+    while (this.memQuery.size > MEM_QUERY_MAX_ENTRIES) {
+      const oldestKey = this.memQuery.keys().next().value
+      if (oldestKey === undefined) break
+      this.memQuery.delete(oldestKey)
+    }
+  }
+
+  /** 読み取りヒットで mtime を更新し、mtime ベースの eviction を LRU 近似にする（失敗は無視）。 */
+  private touchForEviction(cacheKey: string): void {
+    const now = new Date()
+    void utimes(this.audioPath(cacheKey), now, now).catch(() => {})
+    void utimes(this.queryPath(cacheKey), now, now).catch(() => {})
   }
 
   // -------------------------------------------------------------------------
@@ -101,10 +188,18 @@ export class AudioCacheStore {
     try {
       const entries = await readdir(this.dir, { withFileTypes: true })
       const now = Date.now()
-      const files: Array<{ name: string; path: string; size: number; mtimeMs: number }> = []
+      // 音声 (.txt) と AudioQuery サイドカー (.query.json) はペアで扱う:
+      // サイズは合算、mtime は新しい方、削除も常に両方まとめて行う。
+      interface PairInfo {
+        size: number
+        mtimeMs: number
+        paths: string[]
+      }
+      const pairs = new Map<string, PairInfo>()
 
       for (const entry of entries) {
-        if (!entry.isFile() || !AUDIO_CACHE_FILE_PATTERN.test(entry.name)) continue
+        if (!entry.isFile()) continue
+        if (!AUDIO_CACHE_FILE_PATTERN.test(entry.name) && !AUDIO_CACHE_QUERY_FILE_PATTERN.test(entry.name)) continue
         const filePath = join(this.dir, entry.name)
         let fileStat: Stats
         try {
@@ -112,11 +207,20 @@ export class AudioCacheStore {
         } catch {
           continue
         }
-        files.push({ name: entry.name, path: filePath, size: fileStat.size, mtimeMs: fileStat.mtimeMs })
+        const cacheKey = entry.name.slice(0, 64)
+        const pair = pairs.get(cacheKey) ?? { size: 0, mtimeMs: 0, paths: [] }
+        pair.size += fileStat.size
+        pair.mtimeMs = Math.max(pair.mtimeMs, fileStat.mtimeMs)
+        pair.paths.push(filePath)
+        pairs.set(cacheKey, pair)
       }
 
       const toDelete = planAudioCacheCleanup({
-        entries: files,
+        entries: [...pairs.entries()].map(([cacheKey, pair]) => ({
+          path: cacheKey,
+          size: pair.size,
+          mtimeMs: pair.mtimeMs,
+        })),
         now,
         ttlMs: this.ttlMs,
         maxBytes: this.maxBytes,
@@ -124,16 +228,18 @@ export class AudioCacheStore {
 
       if (toDelete.size === 0) return
 
-      for (const path of toDelete) {
-        try {
-          await unlink(path)
-        } catch {
-          // ignore cleanup races
+      for (const cacheKey of toDelete) {
+        const pair = pairs.get(cacheKey)
+        if (!pair) continue
+        for (const path of pair.paths) {
+          try {
+            await unlink(path)
+          } catch {
+            // ignore cleanup races
+          }
         }
-        const fileName = basename(path)
-        if (fileName.endsWith('.txt')) {
-          this.mem.delete(fileName.slice(0, -4))
-        }
+        this.memDelete(cacheKey)
+        this.memQuery.delete(cacheKey)
       }
     } catch (error) {
       console.warn('Warning: failed to cleanup TTS player audio cache:', error)
@@ -168,6 +274,24 @@ export class AudioCacheStore {
 // Pure utility (no state dependency)
 // ---------------------------------------------------------------------------
 
+/** プロパティ列挙順に依存しない JSON 文字列化（キーを再帰的にソート）。 */
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value))
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep)
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const sorted: Record<string, unknown> = {}
+    for (const key of Object.keys(record).sort()) {
+      sorted[key] = sortKeysDeep(record[key])
+    }
+    return sorted
+  }
+  return value
+}
+
 export function createAudioCacheKey(input: {
   engineId?: string
   baseUrl?: string
@@ -184,7 +308,7 @@ export function createAudioCacheKey(input: {
   accentPhrases?: AccentPhrase[]
 }): string {
   const keyInput = input.audioQuery
-    ? JSON.stringify({
+    ? stableStringify({
         engineId: input.engineId ?? 'unknown',
         baseUrl: input.baseUrl ?? '',
         speaker: input.speaker,
@@ -192,7 +316,7 @@ export function createAudioCacheKey(input: {
         dictionaryRevision: input.dictionaryRevision ?? 0,
         audioQuery: input.audioQuery,
       })
-    : JSON.stringify({
+    : stableStringify({
         engineId: input.engineId ?? 'unknown',
         baseUrl: input.baseUrl ?? '',
         speaker: input.speaker,

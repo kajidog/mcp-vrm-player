@@ -1,10 +1,15 @@
+import { join } from 'node:path'
 import type { AccentPhrase, AudioQuery } from '@kajidog/tts-client'
 import type { TtsEngine } from '@kajidog/tts-client'
 import { PoseRegistryStore } from '../pose-registry/store.js'
 import type { ToolDeps } from '../types.js'
 import { VrmRegistryStore } from '../vrm-registry/store.js'
 import { AudioCacheStore, createAudioCacheKey } from './audio-cache.js'
-import { getPlayerDictionaryRevision } from './dictionary-revision.js'
+import {
+  flushPlayerDictionaryRevision,
+  getPlayerDictionaryRevision,
+  initPlayerDictionaryRevision,
+} from './dictionary-revision.js'
 import { PlayerSettingsStore } from './player-settings-store.js'
 import type { PlayerSessionState } from './session-state.js'
 import { SessionStateStore } from './session-state.js'
@@ -81,6 +86,7 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
   // セッションごとの再登録で初期化が多重実行されないようにする。
   if (!audioCacheStore) {
     audioCacheStore = new AudioCacheStore(config)
+    initPlayerDictionaryRevision(join(audioCacheStore.getDir(), 'dictionary-revision.json'))
   }
   if (!sessionStateStore) {
     sessionStateStore = new SessionStateStore(config, audioCacheStore.getDir())
@@ -201,11 +207,15 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
   const resultFromCache = async (
     resolved: ResolvedSynthesizeInput,
     speakerName: string,
+    cacheKey: string,
     cachedBase64: string,
     effectiveAudioQuery?: AudioQuery
   ): Promise<SynthesizeResult> => {
+    // サイドカー保存した AudioQuery があればエンジン往復なしでキャッシュを返せる
+    // （エンジン停止中でもキャッシュヒットが失敗しない）。エンジン照会はレガシーエントリのみ。
     const cachedQuery =
       effectiveAudioQuery ??
+      (await cache.readCachedQuery(cacheKey)) ??
       applyQueryOverrides(await playerEngine.generateQuery(resolved.text, resolved.speaker), resolved)
     return {
       audioBase64: cachedBase64,
@@ -230,12 +240,14 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
     cacheKey: string,
     effectiveAudioQuery?: AudioQuery
   ): Promise<SynthesizeResult> => {
-    const resolvedQuery = effectiveAudioQuery
-      ? { ...effectiveAudioQuery }
-      : applyQueryOverrides(await playerEngine.generateQuery(resolved.text, resolved.speaker), resolved)
+    // effectiveAudioQuery は synthesizeWithCache 側で既に override 適用済み。
+    const resolvedQuery =
+      effectiveAudioQuery ??
+      applyQueryOverrides(await playerEngine.generateQuery(resolved.text, resolved.speaker), resolved)
     const audioData = await playerEngine.synthesize(resolvedQuery, resolved.speaker)
     const base64Audio = Buffer.from(audioData).toString('base64')
     await cache.writeCachedBase64(cacheKey, base64Audio)
+    void cache.writeCachedQuery(cacheKey, resolvedQuery)
     return {
       audioBase64: base64Audio,
       text: resolved.text,
@@ -256,11 +268,14 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
   const synthesizeWithCache = async (input: SynthesizeInput): Promise<SynthesizeResult> => {
     const resolved = resolveSynthesisInput(input)
     const speakerName = await getSpeakerName(resolved.speaker)
-    const effectiveAudioQuery = await refreshMoraData(resolved)
+    // override（speedScale 等）はキャッシュキー算出前に audioQuery へ適用する。
+    // 後から適用すると override 違いの合成が同じキーに衝突し、黙って無視されてしまう。
+    const refreshedQuery = await refreshMoraData(resolved)
+    const effectiveAudioQuery = refreshedQuery ? applyQueryOverrides(refreshedQuery, resolved) : undefined
     const cacheKey = buildCacheKey(resolved, effectiveAudioQuery)
-    const cachedBase64 = cache.readCachedBase64(cacheKey)
+    const cachedBase64 = await cache.readCachedBase64(cacheKey)
     if (cachedBase64) {
-      return resultFromCache(resolved, speakerName, cachedBase64, effectiveAudioQuery)
+      return resultFromCache(resolved, speakerName, cacheKey, cachedBase64, effectiveAudioQuery)
     }
 
     const inFlight = inFlightSyntheses.get(cacheKey)
@@ -300,6 +315,7 @@ export async function flushPlayerRuntime(): Promise<void> {
     vrmRegistryStore?.flush(),
     poseRegistryStore?.flush(),
     playerSettingsStore?.flush(),
+    flushPlayerDictionaryRevision(),
   ])
 }
 
