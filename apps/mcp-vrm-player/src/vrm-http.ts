@@ -64,14 +64,15 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
   app.options('/vrms/:fileName', (c) => {
     c.header('Access-Control-Allow-Origin', '*')
     c.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    // X-API-Key を含めないと、API キー付きフェッチがプリフライトで弾かれて本リクエストに到達しない。
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key')
     return c.body(null, 204)
   })
 
   app.options('/poses/:fileName', (c) => {
     c.header('Access-Control-Allow-Origin', '*')
     c.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key')
     return c.body(null, 204)
   })
 
