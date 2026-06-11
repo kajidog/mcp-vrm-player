@@ -93,27 +93,18 @@ describe('tool groups (--disable-groups)', () => {
       expect(tools).toContain('speak_player')
       expect(tools).toContain('find_models')
       expect(tools).toContain('open_model_manager')
-      expect(tools).toContain('resynthesize_player')
-      expect(tools).toContain('get_player_state')
-      expect(tools).toContain('open_dictionary_ui')
+      expect(tools).toContain('list_vrms')
+      expect(tools).toContain('set_default_model')
     })
 
-    it('dictionary グループを展開する', () => {
+    it('dictionary グループは後方互換のため空で残る', () => {
       const tools = expandGroups(['dictionary'])
-      expect(tools).toEqual(TOOL_GROUPS.dictionary)
-      expect(tools).toContain('get_accent_phrases')
-      expect(tools).toContain('get_user_dictionary')
-      expect(tools).toContain('add_user_dictionary_word')
-      expect(tools).toContain('update_user_dictionary_word')
-      expect(tools).toContain('delete_user_dictionary_word')
-      expect(tools).toContain('add_user_dictionary_words')
-      expect(tools).toContain('update_user_dictionary_words')
+      expect(tools).toEqual([])
     })
 
-    it('file グループを展開する', () => {
+    it('file グループは後方互換のため空で残る', () => {
       const tools = expandGroups(['file'])
-      expect(tools).toEqual(TOOL_GROUPS.file)
-      expect(tools).toContain('synthesize_file')
+      expect(tools).toEqual([])
     })
 
     it('apps グループを展開する', () => {
@@ -121,14 +112,14 @@ describe('tool groups (--disable-groups)', () => {
       expect(tools).toEqual(TOOL_GROUPS.apps)
       expect(tools).toContain('speak_player')
       expect(tools).toContain('open_model_manager')
-      expect(tools).toContain('resynthesize_player')
-      expect(tools).toContain('open_dictionary_ui')
+      expect(tools).toContain('_test_speak_for_player')
+      expect(tools).toContain('_list_poses_for_player')
     })
 
     it('複数グループを展開する', () => {
-      const tools = expandGroups(['player', 'dictionary'])
-      expect(tools).toContain('speak_player')
-      expect(tools).toContain('get_accent_phrases')
+      const tools = expandGroups(['player', 'apps'])
+      expect(tools).toContain('start_here')
+      expect(tools).toContain('_get_speakers_for_player')
     })
 
     it('空配列を渡すと空配列を返す', () => {
