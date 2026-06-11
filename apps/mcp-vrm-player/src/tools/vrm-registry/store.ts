@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  AsyncLock,
   DebouncedJsonFile,
   decodeAndValidateGlbBase64,
   normalizeOwnerUserId,
@@ -56,6 +57,9 @@ export class VrmRegistryStore {
   private readonly registry = new Map<string, VrmModel>()
   private readonly file: DebouncedJsonFile
   private readonly vrmDir: string
+  // バイナリ書き込みを伴う操作（register / replaceBinary / delete）を直列化し、
+  // await 中の並行リクエストでファイルとメタデータが食い違う TOCTOU を防ぐ。
+  private readonly writeLock = new AsyncLock()
 
   constructor(options: VrmRegistryStoreOptions) {
     this.file = new DebouncedJsonFile(
@@ -107,36 +111,38 @@ export class VrmRegistryStore {
     const vrmFilePath = join(this.vrmDir, `${id}.vrm`)
     const buffer = decodeAndValidateVrmBase64(input.vrmBase64)
 
-    await writeBinaryAtomic(vrmFilePath, buffer)
-    const thumbnail = extractVrmThumbnail(buffer)
+    return this.writeLock.run(async () => {
+      await writeBinaryAtomic(vrmFilePath, buffer)
+      const thumbnail = extractVrmThumbnail(buffer)
 
-    const now = Date.now()
-    const ownerUserId = normalizeOwnerUserId(input.ownerUserId)
-    const model: VrmModel = {
-      id,
-      ownerUserId,
-      name: input.name,
-      speakerId: input.speakerId,
-      isDefault: input.isDefault === true || !this.hasOwnedModel(ownerUserId),
-      isPublic: input.isPublic === true,
-      poses: input.poses ?? createDefaultBuiltinAttachments(),
-      ...(input.emotionBindings !== undefined ? { emotionBindings: input.emotionBindings } : {}),
-      vrmFilePath,
-      vrmSizeBytes: buffer.byteLength,
-      ...(thumbnail
-        ? { thumbnailBase64: thumbnail.thumbnailBase64, thumbnailMimeType: thumbnail.thumbnailMimeType }
-        : {}),
-      createdAt: now,
-      updatedAt: now,
-    }
+      const now = Date.now()
+      const ownerUserId = normalizeOwnerUserId(input.ownerUserId)
+      const model: VrmModel = {
+        id,
+        ownerUserId,
+        name: input.name,
+        speakerId: input.speakerId,
+        isDefault: input.isDefault === true || !this.hasOwnedModel(ownerUserId),
+        isPublic: input.isPublic === true,
+        poses: input.poses ?? createDefaultBuiltinAttachments(),
+        ...(input.emotionBindings !== undefined ? { emotionBindings: input.emotionBindings } : {}),
+        vrmFilePath,
+        vrmSizeBytes: buffer.byteLength,
+        ...(thumbnail
+          ? { thumbnailBase64: thumbnail.thumbnailBase64, thumbnailMimeType: thumbnail.thumbnailMimeType }
+          : {}),
+        createdAt: now,
+        updatedAt: now,
+      }
 
-    this.registry.set(id, model)
-    if (model.isDefault) {
-      this.clearDefaultExcept(id, model.ownerUserId)
-    }
-    this.ensureDefaultForOwner(model.ownerUserId, model.isDefault ? id : undefined)
-    this.file.scheduleSave()
-    return model
+      this.registry.set(id, model)
+      if (model.isDefault) {
+        this.clearDefaultExcept(id, model.ownerUserId)
+      }
+      this.ensureDefaultForOwner(model.ownerUserId, model.isDefault ? id : undefined)
+      this.file.scheduleSave()
+      return model
+    })
   }
 
   update(id: string, fields: UpdateVrmInput, ownerUserId?: string): VrmModel {
@@ -165,42 +171,46 @@ export class VrmRegistryStore {
   }
 
   async replaceBinary(id: string, vrmBase64: string, ownerUserId?: string): Promise<VrmModel> {
-    const existing = this.registry.get(id)
-    if (!existing) throw new Error(`VRM not found: ${id}`)
-    assertOwner(existing, ownerUserId)
-
     const buffer = decodeAndValidateVrmBase64(vrmBase64)
-    await writeBinaryAtomic(existing.vrmFilePath, buffer)
-    const thumbnail = extractVrmThumbnail(buffer)
+    return this.writeLock.run(async () => {
+      const existing = this.registry.get(id)
+      if (!existing) throw new Error(`VRM not found: ${id}`)
+      assertOwner(existing, ownerUserId)
 
-    const next: VrmModel = {
-      ...existing,
-      vrmSizeBytes: buffer.byteLength,
-      thumbnailBase64: thumbnail?.thumbnailBase64,
-      thumbnailMimeType: thumbnail?.thumbnailMimeType,
-      updatedAt: Date.now(),
-    }
-    this.registry.set(id, next)
-    this.file.scheduleSave()
-    return next
+      await writeBinaryAtomic(existing.vrmFilePath, buffer)
+      const thumbnail = extractVrmThumbnail(buffer)
+
+      const next: VrmModel = {
+        ...existing,
+        vrmSizeBytes: buffer.byteLength,
+        thumbnailBase64: thumbnail?.thumbnailBase64,
+        thumbnailMimeType: thumbnail?.thumbnailMimeType,
+        updatedAt: Date.now(),
+      }
+      this.registry.set(id, next)
+      this.file.scheduleSave()
+      return next
+    })
   }
 
   async delete(id: string, ownerUserId?: string): Promise<void> {
-    const existing = this.registry.get(id)
-    if (!existing) return
-    assertOwner(existing, ownerUserId)
+    return this.writeLock.run(async () => {
+      const existing = this.registry.get(id)
+      if (!existing) return
+      assertOwner(existing, ownerUserId)
 
-    this.registry.delete(id)
-    this.ensureDefaultForOwner(existing.ownerUserId)
-    this.file.scheduleSave()
+      this.registry.delete(id)
+      this.ensureDefaultForOwner(existing.ownerUserId)
+      this.file.scheduleSave()
 
-    try {
-      if (existsSync(existing.vrmFilePath)) {
-        await unlink(existing.vrmFilePath)
+      try {
+        if (existsSync(existing.vrmFilePath)) {
+          await unlink(existing.vrmFilePath)
+        }
+      } catch (error) {
+        console.warn(`Warning: failed to delete VRM file ${existing.vrmFilePath}:`, error)
       }
-    } catch (error) {
-      console.warn(`Warning: failed to delete VRM file ${existing.vrmFilePath}:`, error)
-    }
+    })
   }
 
   setDefault(id: string, ownerUserId?: string): VrmModel {

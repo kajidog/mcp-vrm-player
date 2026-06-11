@@ -1,11 +1,12 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PoseListView } from './features/poses/PoseListView'
+import { type PlayerChrome, PlayerChromeContext } from './features/vrm-player/PlayerChromeContext'
 import { SettingsView } from './features/vrm-player/components/SettingsView'
 import { VRMPlayer } from './features/vrm-player/components/VRMPlayer'
 import { useDisplayMode } from './features/vrm-player/hooks/useDisplayMode'
 import { useVrmPlayerApp } from './features/vrm-player/hooks/useVrmPlayerApp'
-import type { VrmPlayerLoadingPhase } from './features/vrm-player/types'
+import type { PlayerTransport, VrmPlayerLoadingPhase } from './features/vrm-player/types'
 import { VrmRegisterView } from './features/vrm-registry/VrmRegisterView'
 
 type View = 'player' | 'settings' | 'register' | 'edit' | 'poses'
@@ -121,6 +122,53 @@ export function McpApp() {
   const fullscreen = displayMode.displayMode === 'fullscreen'
   const inlineSizeNotificationTrigger = `${view}:${renderPanelOpen ? 'open' : 'closed'}`
 
+  // 画面遷移・パネル開閉・表示モードのチュームは Context で配り、
+  // VRMPlayer → PlayerHeader へ素通しの prop を引き回さない。
+  const chrome = useMemo<PlayerChrome>(
+    () => ({
+      fullscreen,
+      canFullscreen: displayMode.canFullscreen,
+      renderPanelOpen,
+      onToggleFullscreen: () => {
+        if (fullscreen) void displayMode.requestInline()
+        else void displayMode.requestFullscreen()
+      },
+      onOpenRenderPanel: () => setRenderPanelOpen(true),
+      onCloseRenderPanel: () => setRenderPanelOpen(false),
+      onOpenServerSettings: () => {
+        setRenderPanelOpen(false)
+        setView('settings')
+      },
+      onOpenPoses: () => {
+        setRenderPanelOpen(false)
+        setView('poses')
+      },
+      onAddModel: () => {
+        setEditingModelId(null)
+        setView('register')
+      },
+      onEditModel: (modelId) => {
+        setEditingModelId(modelId)
+        setView('edit')
+      },
+    }),
+    [fullscreen, displayMode, renderPanelOpen]
+  )
+
+  const transport: PlayerTransport = {
+    isPlaying: player.isPlaying,
+    canReplay: player.canReplay,
+    hasSegments: player.hasSegments,
+    currentIndex: player.currentSegmentIndex,
+    totalSegments: player.segments.length,
+    subscribeTime: player.subscribeTime,
+    getTimeSnapshot: player.getTimeSnapshot,
+    onPlay: player.play,
+    onPause: player.pause,
+    onPrev: player.prev,
+    onNext: player.next,
+  }
+
   useEffect(() => {
     if (!player.app || fullscreen || !inlineSizeNotificationTrigger) return
     return scheduleInlineSizeNotification(player.app)
@@ -202,58 +250,25 @@ export function McpApp() {
       className={fullscreen ? 'relative flex h-full min-h-0 flex-col' : 'relative'}
     >
       <div className={playerRootClassName || undefined} aria-hidden={preparing}>
-        <VRMPlayer
-          app={player.app}
-          source={player.source}
-          loadingModel={player.loadingModel}
-          pose={player.pose}
-          expression={player.expression}
-          speechText={player.currentSegmentText}
-          gaze={player.currentSegmentGaze}
-          activeModelId={player.activeModel?.id ?? null}
-          listRefreshKey={listRefreshKey}
-          isPlaying={player.isPlaying}
-          canReplay={player.canReplay}
-          hasSegments={player.hasSegments}
-          currentIndex={player.currentSegmentIndex}
-          totalSegments={player.segments.length}
-          subscribeTime={player.subscribeTime}
-          getTimeSnapshot={player.getTimeSnapshot}
-          fullscreen={fullscreen}
-          canFullscreen={displayMode.canFullscreen}
-          mouthRef={player.mouthRef}
-          onSwitchVrm={player.switchVrm}
-          onPlay={player.play}
-          onPause={player.pause}
-          onPrev={player.prev}
-          onNext={player.next}
-          onModelError={player.setModelError}
-          onVrmLoadStart={player.notifyVrmLoadStart}
-          onVrmLoaded={player.notifyVrmLoaded}
-          renderPanelOpen={renderPanelOpen}
-          onOpenRenderPanel={() => setRenderPanelOpen(true)}
-          onCloseRenderPanel={() => setRenderPanelOpen(false)}
-          onOpenServerSettings={() => {
-            setRenderPanelOpen(false)
-            setView('settings')
-          }}
-          onOpenPoses={() => {
-            setRenderPanelOpen(false)
-            setView('poses')
-          }}
-          onAddModel={() => {
-            setEditingModelId(null)
-            setView('register')
-          }}
-          onEditModel={(modelId) => {
-            setEditingModelId(modelId)
-            setView('edit')
-          }}
-          onToggleFullscreen={() => {
-            if (fullscreen) void displayMode.requestInline()
-            else void displayMode.requestFullscreen()
-          }}
-        />
+        <PlayerChromeContext.Provider value={chrome}>
+          <VRMPlayer
+            app={player.app}
+            source={player.source}
+            loadingModel={player.loadingModel}
+            pose={player.pose}
+            expression={player.expression}
+            speechText={player.currentSegmentText}
+            gaze={player.currentSegmentGaze}
+            activeModelId={player.activeModel?.id ?? null}
+            listRefreshKey={listRefreshKey}
+            mouthRef={player.mouthRef}
+            transport={transport}
+            onSwitchVrm={player.switchVrm}
+            onModelError={player.setModelError}
+            onVrmLoadStart={player.notifyVrmLoadStart}
+            onVrmLoaded={player.notifyVrmLoaded}
+          />
+        </PlayerChromeContext.Provider>
       </div>
       {showErrorStatus ? <ErrorStatus message={player.errorMsg} /> : null}
       {preparing ? <LoadingOverlay phase={player.loadingPhase} progress={player.loadingProgress} /> : null}

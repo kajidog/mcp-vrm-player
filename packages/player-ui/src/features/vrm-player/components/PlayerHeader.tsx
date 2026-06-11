@@ -1,5 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { FullscreenExitIcon, FullscreenIcon } from '~/icons'
+import { usePlayerChrome } from '../PlayerChromeContext'
+import type { PlayerTransport } from '../types'
 import { ModelStrip } from './ModelStrip'
 import { TransportBar } from './TransportBar'
 
@@ -8,23 +10,8 @@ interface PlayerHeaderProps {
   activeModelId: string | null
   loadingModel: boolean
   listRefreshKey: number
-  hasSegments: boolean
-  isPlaying: boolean
-  canReplay: boolean
-  currentIndex: number | null
-  totalSegments: number
-  subscribeTime: (listener: () => void) => () => void
-  getTimeSnapshot: () => { currentTime: number; duration: number }
-  fullscreen: boolean
-  canFullscreen: boolean
+  transport: PlayerTransport
   onSwitchVrm: (modelId: string) => void
-  onAddModel: () => void
-  onEditModel: (modelId: string) => void
-  onPlay: () => void
-  onPause: () => void
-  onPrev: () => void
-  onNext: () => void
-  onToggleFullscreen: () => void
 }
 
 export function PlayerHeader({
@@ -32,24 +19,10 @@ export function PlayerHeader({
   activeModelId,
   loadingModel,
   listRefreshKey,
-  hasSegments,
-  isPlaying,
-  canReplay,
-  currentIndex,
-  totalSegments,
-  subscribeTime,
-  getTimeSnapshot,
-  fullscreen,
-  canFullscreen,
+  transport,
   onSwitchVrm,
-  onAddModel,
-  onEditModel,
-  onPlay,
-  onPause,
-  onPrev,
-  onNext,
-  onToggleFullscreen,
 }: PlayerHeaderProps) {
+  const chrome = usePlayerChrome()
   return (
     <div className="flex items-center gap-2 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-2 py-2">
       <ModelStrip
@@ -58,32 +31,32 @@ export function PlayerHeader({
         busy={loadingModel}
         refreshKey={listRefreshKey}
         onSelect={onSwitchVrm}
-        onAdd={onAddModel}
-        onEdit={onEditModel}
+        onAdd={chrome.onAddModel}
+        onEdit={chrome.onEditModel}
       />
       <TransportBar
-        isPlaying={isPlaying}
-        canReplay={canReplay}
-        hasSegments={hasSegments}
-        currentIndex={currentIndex}
-        totalSegments={totalSegments}
-        subscribeTime={subscribeTime}
-        getTimeSnapshot={getTimeSnapshot}
-        onPlay={onPlay}
-        onPause={onPause}
-        onPrev={onPrev}
-        onNext={onNext}
+        isPlaying={transport.isPlaying}
+        canReplay={transport.canReplay}
+        hasSegments={transport.hasSegments}
+        currentIndex={transport.currentIndex}
+        totalSegments={transport.totalSegments}
+        subscribeTime={transport.subscribeTime}
+        getTimeSnapshot={transport.getTimeSnapshot}
+        onPlay={transport.onPlay}
+        onPause={transport.onPause}
+        onPrev={transport.onPrev}
+        onNext={transport.onNext}
       />
       <div className="flex shrink-0 items-center gap-1">
         {loadingModel ? <div className="vv-spinner-sm" /> : null}
-        {canFullscreen ? (
+        {chrome.canFullscreen ? (
           <button
             type="button"
-            title={fullscreen ? 'Inline' : 'Fullscreen'}
-            onClick={onToggleFullscreen}
+            title={chrome.fullscreen ? 'Inline' : 'Fullscreen'}
+            onClick={chrome.onToggleFullscreen}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] hover:border-[var(--ui-accent)]"
           >
-            {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+            {chrome.fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
           </button>
         ) : null}
       </div>

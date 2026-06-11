@@ -54,6 +54,28 @@ describe('PoseRegistryStore', () => {
     expect(reloaded.readVrmaBase64('bow_v2')).toBe(SAMPLE_VRMA_BASE64)
   })
 
+  it('同じIDの並行登録は片方だけ成功し、ファイルは成功した側の内容になる', async () => {
+    const store = createStore()
+    const otherBytes = Buffer.concat([SAMPLE_VRMA_BYTES, Buffer.from([0x00, 0x00, 0x00, 0x00])])
+    const results = await Promise.allSettled([
+      store.register({ id: 'race', loop: true, vrmaBase64: SAMPLE_VRMA_BASE64 }),
+      store.register({ id: 'race', loop: false, vrmaBase64: otherBytes.toString('base64') }),
+    ])
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled')
+    const rejected = results.filter((result) => result.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+      message: expect.stringMatching(/already exists/),
+    })
+
+    // メタデータが指すサイズと実ファイルの内容が一致する（敗者がファイルを上書きしていない）。
+    const winner = (fulfilled[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof store.register>>>).value
+    const onDisk = readFileSync(winner.vrmaFilePath)
+    expect(onDisk.byteLength).toBe(winner.vrmaSizeBytes)
+  })
+
   it('ポーズ一覧と更新はユーザーごとに分離される', async () => {
     const store = createStore()
     const a = await store.register({

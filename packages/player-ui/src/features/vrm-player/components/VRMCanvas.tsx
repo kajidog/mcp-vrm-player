@@ -3,12 +3,10 @@ import { Html, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
 import { type ComponentRef, useEffect, useRef, useState } from 'react'
 import type { PoseSource } from '~/features/poses/types'
-import { SettingsIcon } from '~/icons'
 import { useColorScheme } from '../hooks/useColorScheme'
 import type { MouthRef } from '../hooks/useLipSync'
 import { useRenderSettings } from '../hooks/useRenderSettings'
 import type { VrmPlayerState, VrmSource } from '../types'
-import { RenderSettingsPanel } from './RenderSettingsPanel'
 import { VRMScene } from './VRMScene'
 
 // drei の OrbitControls はサードパーティ実装（three-stdlib）を ref に出すので、
@@ -36,11 +34,6 @@ interface VRMCanvasProps {
   onLoadStart?: () => void
   onLoaded?: () => void
   heightClassName?: string
-  renderPanelOpen?: boolean
-  onOpenRenderPanel?: () => void
-  onCloseRenderPanel?: () => void
-  onOpenServerSettings?: () => void
-  onOpenPoses?: () => void
 }
 
 const SCENE_COLORS = {
@@ -213,11 +206,6 @@ export function VRMCanvas({
   onLoadStart,
   onLoaded,
   heightClassName = 'h-[420px]',
-  renderPanelOpen = false,
-  onOpenRenderPanel,
-  onCloseRenderPanel,
-  onOpenServerSettings,
-  onOpenPoses,
 }: VRMCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const colorScheme = useColorScheme()
@@ -309,25 +297,6 @@ export function VRMCanvas({
           ) : null}
         </Canvas>
       </div>
-      {onOpenRenderPanel && !renderPanelOpen ? (
-        <button
-          type="button"
-          title="表示設定"
-          aria-label="表示設定を開く"
-          onClick={onOpenRenderPanel}
-          className="absolute bottom-3 right-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] shadow-md hover:border-[var(--ui-accent)]"
-        >
-          <SettingsIcon />
-        </button>
-      ) : null}
-      {renderPanelOpen && onCloseRenderPanel && onOpenServerSettings && onOpenPoses ? (
-        <RenderSettingsPanel
-          app={app}
-          onClose={onCloseRenderPanel}
-          onOpenServerSettings={onOpenServerSettings}
-          onOpenPoses={onOpenPoses}
-        />
-      ) : null}
     </div>
   )
 }

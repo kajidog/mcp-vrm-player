@@ -7,6 +7,28 @@ import { ANONYMOUS_USER_ID } from './auth-context.js'
 const DEFAULT_DEBOUNCE_MS = 300
 
 /**
+ * 非同期操作を到着順に直列実行する軽量ロック。
+ *
+ * ストアの「registry チェック → await（ファイル書き込み）→ registry 更新」の流れは
+ * await 中に並行リクエストが割り込めるため、チェックと更新が分離して
+ * ファイルとメタデータが食い違う（TOCTOU）。書き込み系操作をこのロックで
+ * 直列化し、チェックから更新までを一塊として実行する。
+ */
+export class AsyncLock {
+  private tail: Promise<unknown> = Promise.resolve()
+
+  run<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.tail.then(fn, fn)
+    // 後続は前の操作の成否に関係なく実行する（失敗をロックに伝播させない）。
+    this.tail = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
+  }
+}
+
+/**
  * デバウンス付き JSON 永続化ヘルパー。
  *
  * 各ストアに共通する「mkdir → 寛容なロード → デバウンス保存 → atomic 書き込み →
@@ -46,7 +68,9 @@ export class DebouncedJsonFile {
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer)
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null
-      void this.saveToDisk()
+      this.saveToDisk().catch((error) => {
+        console.warn(`Warning: failed to persist ${this.label}:`, error)
+      })
     }, this.debounceMs)
   }
 

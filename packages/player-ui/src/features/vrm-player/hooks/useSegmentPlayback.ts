@@ -10,6 +10,8 @@ interface UseSegmentPlaybackOptions {
   resolvePose: (poseName: string | undefined, seed?: number) => PoseSource | null
   resolveExpression: (segment: PoseSegment | null) => VrmPlayerState['expression']
   onError: (message: string) => void
+  /** セグメントの再生が実際に始まった時に呼ばれる。前回のエラー表示のクリア等に使う。 */
+  onPlaybackStart?: () => void
   /** 裏で進行中の後続セグメント音声取得があればその Promise を返す（なければ null）。 */
   waitForPendingAudio?: () => Promise<unknown> | null
 }
@@ -19,6 +21,7 @@ export function useSegmentPlayback({
   resolvePose,
   resolveExpression,
   onError,
+  onPlaybackStart,
   waitForPendingAudio,
 }: UseSegmentPlaybackOptions) {
   const [pose, setPose] = useState<PoseSource | null>(null)
@@ -158,6 +161,8 @@ export function useSegmentPlayback({
     }
     lipSync.setSegment(current)
     lipSync.resumeContext()
+    // 再生が始まる時点で前回のエラー表示を片付ける（play() が失敗すれば改めてエラーになる）。
+    onPlaybackStart?.()
     void audio.play().catch((error) => {
       if (version !== playbackVersionRef.current) return
       failPlayback(`音声の再生に失敗しました: ${error instanceof Error ? error.message : String(error)}`)

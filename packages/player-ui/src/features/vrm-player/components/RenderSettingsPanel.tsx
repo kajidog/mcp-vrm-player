@@ -1,7 +1,23 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import { useEffect } from 'react'
+import { SettingsIcon } from '~/icons'
 import { DPR_OPTIONS, POSE_EASING_OPTIONS, useRenderSettings } from '../hooks/useRenderSettings'
 import { SettingNumber, SettingSelect, SettingToggle } from './SettingsControls'
+
+/** 3D ビューの右下に重ねる「表示設定」ドロワーを開くボタン。relative な親に重ねて使う。 */
+export function RenderSettingsButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      title="表示設定"
+      aria-label="表示設定を開く"
+      onClick={onOpen}
+      className="absolute bottom-3 right-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-button-bg)] text-[var(--ui-text)] shadow-md hover:border-[var(--ui-accent)]"
+    >
+      <SettingsIcon />
+    </button>
+  )
+}
 
 interface RenderSettingsPanelProps {
   app: App | null

@@ -177,7 +177,15 @@ function validateHost(config: BaseServerConfig) {
       return c.json(forbiddenError('Forbidden: Missing Host header'), { status: 403 })
     }
 
-    const hostname = host.includes(':') ? host.split(':')[0] : host
+    // `:` での素朴な分割は IPv6（例: `[::1]:3000`）を壊すので URL パーサに任せる。
+    // URL.hostname は IPv6 をブラケット付き（`[::1]`）・小文字で返す。
+    let hostname: string
+    try {
+      hostname = new URL(`http://${host}`).hostname
+    } catch {
+      console.log(`Rejected request with unparsable Host: ${host}`)
+      return c.json(forbiddenError('Forbidden: Invalid Host header'), { status: 403 })
+    }
 
     if (!config.allowedHosts.includes(hostname)) {
       console.log(`Rejected request with invalid Host: ${host} (allowed: ${config.allowedHosts.join(', ')})`)

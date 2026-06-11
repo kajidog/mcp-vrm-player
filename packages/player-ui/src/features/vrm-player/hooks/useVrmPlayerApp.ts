@@ -127,11 +127,19 @@ export function useVrmPlayerApp(): VrmPlayerState {
     [setLoadingState]
   )
 
+  // 再生開始時に前回のエラー表示を消す。エラー後にユーザーが再生し直したケースで
+  // 古いエラーメッセージが残り続けるのを防ぐ。
+  const clearPlaybackError = useCallback(() => {
+    setErrorMsg('')
+    setStatus((prev) => (prev === 'error' ? 'ready' : prev))
+  }, [])
+
   const playback = useSegmentPlayback({
     lipSync,
     resolvePose: resolveCurrentPose,
     resolveExpression: resolveCurrentExpression,
     onError: setPlaybackError,
+    onPlaybackStart: clearPlaybackError,
     waitForPendingAudio: () => pendingAudioMergeRef.current,
   })
   // onAppCreated 内のハンドラは初回レンダーのクロージャを掴み続けるため、

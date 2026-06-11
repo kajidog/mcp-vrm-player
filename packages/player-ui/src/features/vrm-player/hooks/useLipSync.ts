@@ -380,6 +380,17 @@ export function useLipSync(): LipSyncController {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
+    // close() だけではノードのグラフ接続が残ることがあるため、明示的に切断してから閉じる。
+    try {
+      sourceNodeRef.current?.disconnect()
+    } catch {
+      // 既に切断済みの場合は無視。
+    }
+    try {
+      analyserRef.current?.disconnect()
+    } catch {
+      // 既に切断済みの場合は無視。
+    }
     const ctx = audioCtxRef.current
     if (ctx) {
       ctx.close().catch(() => {
