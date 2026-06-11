@@ -25,7 +25,7 @@ export {
 export { type SessionConfig, setSessionConfig, getSessionConfig, deleteSessionConfig } from './session.js'
 
 // HTTP
-export { type CreateHttpAppOptions, createHttpApp } from './http.js'
+export { type CreateHttpAppOptions, createHttpApp, extractApiKey, isValidApiKey } from './http.js'
 
 // Auth
 export {

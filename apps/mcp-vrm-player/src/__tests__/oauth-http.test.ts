@@ -21,7 +21,8 @@ const authConfig: OAuthConfig = {
   mcpServerUrl: 'http://localhost:3000',
   authServerUrl: 'http://localhost:3001',
   jwksUri: 'http://localhost:3001/.well-known/jwks.json',
-  audience: 'http://localhost:3000',
+  issuer: 'http://localhost:3001',
+  audience: 'http://localhost:3000/mcp',
   scopesSupported: ['openid', 'email', 'profile'],
   resourceName: 'VRM MCP Server',
 }
@@ -167,9 +168,16 @@ describe('OAuth HTTP auth', () => {
 
 describe('VRM OAuth HTTP options', () => {
   it('VRM 固有の resource name はアプリ側デフォルトから作る', () => {
-    expect(createOAuthConfig({ ...baseConfig, oauthEnabled: true }, { resourceName: 'VRM MCP Server' })).toEqual(
-      authConfig
-    )
+    expect(
+      createOAuthConfig(
+        { ...baseConfig, oauthEnabled: true, oauthIssuer: 'http://localhost:3001' },
+        { resourceName: 'VRM MCP Server' }
+      )
+    ).toEqual(authConfig)
+  })
+
+  it('OAuth 有効時に issuer 未設定なら起動時エラーになる', () => {
+    expect(() => createOAuthConfig({ ...baseConfig, oauthEnabled: true })).toThrow(/issuer/i)
   })
 
   it('/mcp を保護対象として渡す', () => {
