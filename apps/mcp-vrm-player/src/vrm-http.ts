@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { Readable } from 'node:stream'
+import { extractApiKey, isValidApiKey } from '@kajidog/mcp-core'
 import type { ServerConfig } from './config.js'
 import { ANONYMOUS_USER_ID, resolveUserId } from './tools/auth-context.js'
 import type { PlayerSettingsStore } from './tools/player/player-settings-store.js'
@@ -42,12 +43,17 @@ function getPublicBaseUrl(config: ServerConfig): string {
 
 export function getVrmModelUrl(config: ServerConfig, modelId: string, options?: { userId?: string }): string {
   const url = `${getPublicBaseUrl(config)}/vrms/${encodeURIComponent(modelId)}.vrm`
-  return withAssetToken(url, 'vrm', modelId, options?.userId)
+  return withAssetToken(config, url, 'vrm', modelId, options?.userId)
 }
 
 export function getPoseVrmaUrl(config: ServerConfig, poseId: string, options?: { userId?: string }): string {
   const url = `${getPublicBaseUrl(config)}/poses/${encodeURIComponent(poseId)}.vrma`
-  return withAssetToken(url, 'pose', poseId, options?.userId)
+  return withAssetToken(config, url, 'pose', poseId, options?.userId)
+}
+
+/** 非 OAuth・API キー運用時に有効な API キー。アセットルートの保護判定に使う。 */
+function activeApiKey(config: ServerConfig): string | undefined {
+  return config.oauthEnabled ? undefined : config.apiKey
 }
 
 export function getVrmHttpOrigin(config: ServerConfig): string {
@@ -83,6 +89,16 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
     const assetToken = c.req.query('token')
     const tokenUserId = resolveAssetTokenUserId(assetToken, 'vrm', modelId)
     if (assetToken && !tokenUserId) return c.text('Not found', 404)
+    // API キー運用時は有効なアセットトークンか API キーのいずれかを要求する
+    // （/mcp だけ保護してアセットを素通しにしない）。列挙防止のため失敗は 404。
+    const apiKey = activeApiKey(config)
+    if (!tokenUserId && apiKey) {
+      const providedKey = extractApiKey({
+        apiKeyHeader: c.req.header('X-API-Key'),
+        authorizationHeader: c.req.header('Authorization'),
+      })
+      if (!isValidApiKey(providedKey, apiKey)) return c.text('Not found', 404)
+    }
     const userId = tokenUserId ?? resolveUserId({ authInfo: c.get?.('auth') })
     const settings = stores?.playerSettings.applyDefaults({}, userId)
     const model = stores?.vrmRegistry.getVisible(modelId, { userId, usePublicVrms: settings?.usePublicVrms ?? true })
@@ -118,6 +134,14 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
     const assetToken = c.req.query('token')
     const tokenUserId = resolveAssetTokenUserId(assetToken, 'pose', poseId)
     if (assetToken && !tokenUserId) return c.text('Not found', 404)
+    const apiKey = activeApiKey(config)
+    if (!tokenUserId && apiKey) {
+      const providedKey = extractApiKey({
+        apiKeyHeader: c.req.header('X-API-Key'),
+        authorizationHeader: c.req.header('Authorization'),
+      })
+      if (!isValidApiKey(providedKey, apiKey)) return c.text('Not found', 404)
+    }
     const userId = tokenUserId ?? resolveUserId({ authInfo: c.get?.('auth') })
     const settings = stores?.playerSettings.applyDefaults({}, userId)
     const pose = stores
@@ -142,10 +166,12 @@ export function registerVrmHttpRoutes(app: HonoLike, config: ServerConfig, store
   })
 }
 
-function withAssetToken(url: string, kind: 'vrm' | 'pose', id: string, userId?: string): string {
-  // 匿名所有の資産はトークンなしで可視なので発行しない
-  if (!userId || userId === ANONYMOUS_USER_ID) return url
-  const token = createAssetToken(kind, id, userId)
+function withAssetToken(config: ServerConfig, url: string, kind: 'vrm' | 'pose', id: string, userId?: string): string {
+  const owner = userId && userId !== ANONYMOUS_USER_ID ? userId : undefined
+  // 匿名所有の資産は通常トークンなしで可視なので発行しないが、API キー運用時は
+  // アセットルート自体が保護されるため、プレイヤーが読めるようトークンを発行する。
+  if (!owner && !activeApiKey(config)) return url
+  const token = createAssetToken(kind, id, owner ?? ANONYMOUS_USER_ID)
   return `${url}?token=${encodeURIComponent(token)}`
 }
 
