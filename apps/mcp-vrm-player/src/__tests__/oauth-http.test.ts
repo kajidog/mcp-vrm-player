@@ -166,6 +166,59 @@ describe('OAuth HTTP auth', () => {
   })
 })
 
+describe('Origin validation', () => {
+  it('ループバックはポート無指定の allowlist エントリで任意ポートを許可する', async () => {
+    const app = createApp()
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://localhost:5173',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    // Origin/Host 検証は通過し、initialize でないため 400 になる（403 ではない）。
+    expect(response.status).toBe(400)
+  })
+
+  it('allowlist 外の Origin は 403 で拒否する', async () => {
+    const app = createApp()
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://evil.example.com',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('非ループバックはポート込みの完全一致を要求する', async () => {
+    const app = createApp({
+      config: { ...baseConfig, allowedOrigins: ['http://example.com'] },
+    })
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://example.com:8080',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(403)
+  })
+})
+
 describe('VRM OAuth HTTP options', () => {
   it('VRM 固有の resource name はアプリ側デフォルトから作る', () => {
     expect(

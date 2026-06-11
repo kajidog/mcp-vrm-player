@@ -107,23 +107,40 @@ function resolveAuthSubject(authInfo?: AuthInfo): string | undefined {
   return undefined
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1'
+}
+
 /**
  * Origin が allowlist に含まれるかをポート込みの完全一致で判定する。
  * （URL の origin 同士を比較するので、デフォルトポートの正規化は URL に任せる）
+ *
+ * 例外として、allowlist エントリがループバック（localhost / 127.0.0.1 / [::1]）かつ
+ * ポート無指定の場合は任意ポートを許可する。開発サーバーのポートを逐一列挙しなくても
+ * 既定の `http://localhost` 等でローカルクライアントが使えるようにするためで、
+ * 非ループバックの Origin は常にポート込みの完全一致を要求する。
  */
 function isAllowedOrigin(origin: string, config: BaseServerConfig): boolean {
-  let normalized: string
+  let originUrl: URL
   try {
-    normalized = new URL(origin).origin
+    originUrl = new URL(origin)
   } catch {
     return false
   }
   return config.allowedOrigins.some((allowed) => {
+    let allowedUrl: URL
     try {
-      return normalized === new URL(allowed).origin
+      allowedUrl = new URL(allowed)
     } catch {
       return false
     }
+    if (originUrl.origin === allowedUrl.origin) return true
+    return (
+      allowedUrl.port === '' &&
+      isLoopbackHostname(allowedUrl.hostname) &&
+      originUrl.protocol === allowedUrl.protocol &&
+      originUrl.hostname === allowedUrl.hostname
+    )
   })
 }
 
