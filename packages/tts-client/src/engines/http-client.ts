@@ -52,13 +52,32 @@ export class HttpClient {
         init.body = JSON.stringify(data)
       }
 
-      const response = await fetch(`${this.baseUrl}${endpoint}`, init)
+      let response: Response
+      try {
+        response = await fetch(`${this.baseUrl}${endpoint}`, init)
+      } catch (error) {
+        // ネットワークエラー / タイムアウトもステータスコード同様にリトライ対象とする。
+        if (attempt < this.maxRetries) {
+          await delay(this.baseDelayMs * 2 ** attempt)
+          continue
+        }
+        throw new VoicevoxError(
+          `API request failed: ${error instanceof Error ? error.message : String(error)}`,
+          VoicevoxErrorCode.API_CONNECTION_ERROR,
+          error
+        )
+      }
       if (!response.ok) {
+        // body を必ず消費してソケットを解放しつつ、エンジンのエラー detail を拾う。
+        const detail = (await response.text().catch(() => '')).trim()
         if (attempt < this.maxRetries && this.retryStatuses.has(response.status)) {
           await delay(resolveRetryDelayMs(response, this.baseDelayMs, attempt))
           continue
         }
-        throw new VoicevoxError(`API request failed: ${response.status}`, VoicevoxErrorCode.API_CONNECTION_ERROR)
+        throw new VoicevoxError(
+          `API request failed: ${response.status}${detail ? ` - ${detail.slice(0, 500)}` : ''}`,
+          VoicevoxErrorCode.API_CONNECTION_ERROR
+        )
       }
 
       if (responseType === 'arraybuffer') {
