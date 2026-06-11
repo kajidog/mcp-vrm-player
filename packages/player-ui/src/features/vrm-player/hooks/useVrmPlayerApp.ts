@@ -79,6 +79,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const activeModelRef = useRef<VrmPlayerState['activeModel']>(null)
   const poseLibraryRef = useRef<Map<string, PoseSource>>(new Map())
   const audioLoadRequestRef = useRef(0)
+  // 後続セグメント音声の裏取得。再生がこの取得を追い越した時に useSegmentPlayback 側で待てるよう共有する。
+  const pendingAudioMergeRef = useRef<Promise<PoseSegment[]> | null>(null)
   // リップシンク制御。AudioContext は audio 生成の useEffect で attach し、
   // セグメント切替で setSegment を呼ぶ。mouthRef を VrmPlayerState に流して VRMScene で参照する。
   const lipSync = useLipSync()
@@ -129,6 +131,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
     resolvePose: resolveCurrentPose,
     resolveExpression: resolveCurrentExpression,
     onError: setPlaybackError,
+    waitForPendingAudio: () => pendingAudioMergeRef.current,
   })
   // onAppCreated 内のハンドラは初回レンダーのクロージャを掴み続けるため、
   // ハンドラからの playback 参照は常にこの ref を経由する。
@@ -468,7 +471,14 @@ export function useVrmPlayerApp(): VrmPlayerState {
                   .map((_, index) => index)
                   .filter((index) => !initialIndexes.includes(index))
                 if (remainingIndexes.length > 0) {
-                  void mergeSegmentAudioIndexes(createdApp, segmentsForPlayback, viewUUID, remainingIndexes)
+                  const mergePromise = mergeSegmentAudioIndexes(
+                    createdApp,
+                    segmentsForPlayback,
+                    viewUUID,
+                    remainingIndexes
+                  )
+                  pendingAudioMergeRef.current = mergePromise
+                  void mergePromise
                     .then((completeSegments) => {
                       if (requestId !== audioLoadRequestRef.current) return
                       playbackRef.current.updateSegments(completeSegments)
@@ -476,6 +486,9 @@ export function useVrmPlayerApp(): VrmPlayerState {
                     .catch((error) => {
                       if (requestId !== audioLoadRequestRef.current) return
                       setPlaybackError(`後続セグメントの音声取得に失敗しました: ${String(error)}`)
+                    })
+                    .finally(() => {
+                      if (pendingAudioMergeRef.current === mergePromise) pendingAudioMergeRef.current = null
                     })
                 }
                 return

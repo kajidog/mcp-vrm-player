@@ -10,9 +10,17 @@ interface UseSegmentPlaybackOptions {
   resolvePose: (poseName: string | undefined) => PoseSource | null
   resolveExpression: (segment: PoseSegment | null) => VrmPlayerState['expression']
   onError: (message: string) => void
+  /** 裏で進行中の後続セグメント音声取得があればその Promise を返す（なければ null）。 */
+  waitForPendingAudio?: () => Promise<unknown> | null
 }
 
-export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, onError }: UseSegmentPlaybackOptions) {
+export function useSegmentPlayback({
+  lipSync,
+  resolvePose,
+  resolveExpression,
+  onError,
+  waitForPendingAudio,
+}: UseSegmentPlaybackOptions) {
   const [pose, setPose] = useState<PoseSource | null>(null)
   const [expression, setExpression] = useState<VrmPlayerState['expression']>(null)
   const [segments, setSegments] = useState<PoseSegment[]>([])
@@ -92,6 +100,25 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
       return
     }
     if (!current.audioBase64) {
+      // 先頭セグメントのみ先行取得して再生開始するため、再生や「次へ」が裏の取得を
+      // 追い越すことがある。進行中の取得があれば完了を待ってから再試行し、
+      // それでも音声がない場合のみエラーにする。
+      const pending = waitForPendingAudio?.()
+      if (pending) {
+        void pending
+          .then(() => {
+            if (version !== playbackVersionRef.current) return
+            if (!segmentsRef.current[index]?.audioBase64) {
+              failPlayback(`セグメント ${index + 1} の音声データがありません。`)
+              return
+            }
+            playSegmentAt(index, version)
+          })
+          .catch(() => {
+            // 取得失敗は useVrmPlayerApp 側の catch がエラー表示するため、ここでは何もしない。
+          })
+        return
+      }
       failPlayback(`セグメント ${index + 1} の音声データがありません。`)
       return
     }
@@ -160,6 +187,11 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
         void audio.play().catch((error) => {
           failPlayback(`音声の再生に失敗しました: ${error instanceof Error ? error.message : String(error)}`)
         })
+        return
+      }
+      // 一時停止中に audio.src が失われていた場合は、現在のセグメントから再生し直す。
+      if (currentSegmentIndex !== null) {
+        jumpTo(currentSegmentIndex)
         return
       }
     }
