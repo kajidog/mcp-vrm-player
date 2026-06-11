@@ -27,14 +27,23 @@ export function isPlayerToolResult(result: CallToolResult): boolean {
   )
 }
 
+// サムネイルとして許可する MIME タイプ。サーバー由来の値をそのまま data URL に
+// 埋め込まない（image/* 以外が混入しても画像として扱う）ための whitelist。
+const ALLOWED_THUMBNAIL_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+
+export function thumbnailDataUrl(record: {
+  thumbnailBase64?: unknown
+  thumbnailMimeType?: unknown
+}): string | undefined {
+  if (typeof record.thumbnailBase64 !== 'string' || !record.thumbnailBase64.trim()) return undefined
+  const requested = typeof record.thumbnailMimeType === 'string' ? record.thumbnailMimeType.trim().toLowerCase() : ''
+  const mimeType = ALLOWED_THUMBNAIL_MIME_TYPES.has(requested) ? requested : 'image/png'
+  return `data:${mimeType};base64,${record.thumbnailBase64}`
+}
+
 export function readDataUrl(record: Record<string, unknown>): string | undefined {
   if (typeof record.thumbnailUrl === 'string' && record.thumbnailUrl.trim()) return record.thumbnailUrl
-  if (typeof record.thumbnailBase64 !== 'string' || !record.thumbnailBase64.trim()) return undefined
-  const mimeType =
-    typeof record.thumbnailMimeType === 'string' && record.thumbnailMimeType.trim()
-      ? record.thumbnailMimeType
-      : 'image/png'
-  return `data:${mimeType};base64,${record.thumbnailBase64}`
+  return thumbnailDataUrl(record)
 }
 
 export function readToolMeta(result: CallToolResult): Record<string, unknown> {

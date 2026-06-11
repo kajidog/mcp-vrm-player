@@ -217,8 +217,8 @@ export function McpApp() {
           hasSegments={player.hasSegments}
           currentIndex={player.currentSegmentIndex}
           totalSegments={player.segments.length}
-          currentTime={player.currentTime}
-          duration={player.duration}
+          subscribeTime={player.subscribeTime}
+          getTimeSnapshot={player.getTimeSnapshot}
           fullscreen={fullscreen}
           canFullscreen={displayMode.canFullscreen}
           mouthRef={player.mouthRef}

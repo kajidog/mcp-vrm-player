@@ -9,8 +9,19 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary)
 }
 
+// 不正な base64 で atob が投げる DOMException を、原因付きの分かりやすいエラーに変換する。
+function decodeBase64(base64: string): string {
+  try {
+    return atob(base64)
+  } catch (error) {
+    const decodeError = new Error('base64 データのデコードに失敗しました')
+    ;(decodeError as Error & { cause?: unknown }).cause = error
+    throw decodeError
+  }
+}
+
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64)
+  const binary = decodeBase64(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i += 1) {
     bytes[i] = binary.charCodeAt(i)
@@ -19,7 +30,7 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 export function base64ToBlobUrl(base64: string, mimeType: string): string {
-  const binary = atob(base64)
+  const binary = decodeBase64(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }))

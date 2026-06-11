@@ -13,8 +13,8 @@ interface PlayerHeaderProps {
   canReplay: boolean
   currentIndex: number | null
   totalSegments: number
-  currentTime: number
-  duration: number
+  subscribeTime: (listener: () => void) => () => void
+  getTimeSnapshot: () => { currentTime: number; duration: number }
   fullscreen: boolean
   canFullscreen: boolean
   onSwitchVrm: (modelId: string) => void
@@ -37,8 +37,8 @@ export function PlayerHeader({
   canReplay,
   currentIndex,
   totalSegments,
-  currentTime,
-  duration,
+  subscribeTime,
+  getTimeSnapshot,
   fullscreen,
   canFullscreen,
   onSwitchVrm,
@@ -67,8 +67,8 @@ export function PlayerHeader({
         hasSegments={hasSegments}
         currentIndex={currentIndex}
         totalSegments={totalSegments}
-        currentTime={currentTime}
-        duration={duration}
+        subscribeTime={subscribeTime}
+        getTimeSnapshot={getTimeSnapshot}
         onPlay={onPlay}
         onPause={onPause}
         onPrev={onPrev}

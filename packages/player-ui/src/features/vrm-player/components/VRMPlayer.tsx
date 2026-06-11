@@ -20,8 +20,8 @@ interface VRMPlayerProps {
   hasSegments: boolean
   currentIndex: number | null
   totalSegments: number
-  currentTime: number
-  duration: number
+  subscribeTime: VrmPlayerState['subscribeTime']
+  getTimeSnapshot: VrmPlayerState['getTimeSnapshot']
   fullscreen: boolean
   canFullscreen: boolean
   mouthRef: MouthRef
@@ -58,8 +58,8 @@ export function VRMPlayer({
   hasSegments,
   currentIndex,
   totalSegments,
-  currentTime,
-  duration,
+  subscribeTime,
+  getTimeSnapshot,
   fullscreen,
   canFullscreen,
   mouthRef,
@@ -92,8 +92,8 @@ export function VRMPlayer({
         canReplay={canReplay}
         currentIndex={currentIndex}
         totalSegments={totalSegments}
-        currentTime={currentTime}
-        duration={duration}
+        subscribeTime={subscribeTime}
+        getTimeSnapshot={getTimeSnapshot}
         fullscreen={fullscreen}
         canFullscreen={canFullscreen}
         onSwitchVrm={(modelId) => {

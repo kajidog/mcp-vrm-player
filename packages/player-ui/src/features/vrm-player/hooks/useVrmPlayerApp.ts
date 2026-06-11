@@ -17,6 +17,7 @@ import {
   readModelManagerRequest,
   readModelPoses,
   readToolMeta,
+  thumbnailDataUrl,
 } from '../utils/playerResult'
 import {
   type PoseSegment,
@@ -100,8 +101,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
     setActiveModel(model)
   }
 
-  const resolveCurrentPose = useCallback((poseName: string | undefined): PoseSource | null => {
-    return resolveSegmentPose(poseName, activeModelRef.current?.poses, poseLibraryRef.current)
+  const resolveCurrentPose = useCallback((poseName: string | undefined, seed?: number): PoseSource | null => {
+    return resolveSegmentPose(poseName, activeModelRef.current?.poses, poseLibraryRef.current, seed)
   }, [])
 
   const resolveCurrentExpression = useCallback((segment: PoseSegment | null): VrmPlayerState['expression'] => {
@@ -237,10 +238,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
           speakerId: meta.speakerId,
           poses: meta.poses,
           emotionBindings: meta.emotionBindings,
-          thumbnailUrl:
-            meta.thumbnailBase64 !== undefined
-              ? `data:${meta.thumbnailMimeType ?? 'image/png'};base64,${meta.thumbnailBase64}`
-              : undefined,
+          thumbnailUrl: thumbnailDataUrl(meta),
         })
         void updateSpeakerIcon(meta.speakerId)
       }
@@ -270,10 +268,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         speakerId: metadata.speakerId,
         poses: metadata.poses,
         emotionBindings: metadata.emotionBindings,
-        thumbnailUrl:
-          metadata.thumbnailBase64 !== undefined
-            ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-            : undefined,
+        thumbnailUrl: thumbnailDataUrl(metadata),
       })
       void updateSpeakerIcon(metadata.speakerId)
       const { source: nextSource, error, revokeUrl } = await resolveVrmSource(currentApp, payload, { isDefault: false })
@@ -674,10 +669,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         speakerId: metadata.speakerId,
         poses: metadata.poses,
         emotionBindings: metadata.emotionBindings,
-        thumbnailUrl:
-          metadata.thumbnailBase64 !== undefined
-            ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-            : undefined,
+        thumbnailUrl: thumbnailDataUrl(metadata),
       })
       void updateSpeakerIcon(metadata.speakerId)
       setStatus('ready')
@@ -694,10 +686,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
             speakerId: metadata.speakerId,
             poses: metadata.poses,
             emotionBindings: metadata.emotionBindings,
-            thumbnailUrl:
-              metadata.thumbnailBase64 !== undefined
-                ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-                : undefined,
+            thumbnailUrl: thumbnailDataUrl(metadata),
           },
           existing
         )
@@ -726,8 +715,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
     expression: playback.expression,
     segments: playback.segments,
     currentSegmentIndex: playback.currentSegmentIndex,
-    currentTime: playback.currentTime,
-    duration: playback.duration,
+    subscribeTime: playback.subscribeTime,
+    getTimeSnapshot: playback.getTimeSnapshot,
     currentSegmentText: playback.currentSegmentText,
     currentSegmentGaze: playback.currentSegmentGaze,
     speakerIconUrl,

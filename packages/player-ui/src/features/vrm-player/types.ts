@@ -59,8 +59,10 @@ export interface VrmPlayerState {
   segments: PoseSegment[]
   // 現在再生中のセグメントの index（再生していないときは null）。
   currentSegmentIndex: number | null
-  currentTime: number
-  duration: number
+  // 再生時刻の購読 API。timeupdate（約4Hz）で 3D シーンを含む全体を再レンダーしないよう、
+  // 時刻表示コンポーネントだけが useSyncExternalStore でローカル購読する。
+  subscribeTime: (listener: () => void) => () => void
+  getTimeSnapshot: () => { currentTime: number; duration: number }
   // 吹き出し表示用に切り出した「現在再生中のセグメントのテキスト」。
   currentSegmentText: string | null
   // 現在再生中のセグメントの視線指定。未指定時は従来互換でカメラ目線扱い。
