@@ -219,6 +219,17 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
   }
   const sessions: Map<string, SessionEntry> = new Map()
 
+  // serverFactory 未指定時は共有 server を使えるセッションは1つだけ。
+  // SDK の Server は一度 connect すると再 connect できないため、2セッション目以降は
+  // 不透明な 500 ではなく明示的なエラーで拒否する。close 後も再利用はしない。
+  let sharedServerConsumed = false
+  if (!serverFactory) {
+    console.warn(
+      '[mcp-core] serverFactory not provided; HTTP mode will support only a single session. ' +
+        'Provide serverFactory to support multiple sessions.'
+    )
+  }
+
   // initialize 処理中（onsessioninitialized 前）のセッション数。
   // 並行 initialize が全員同じ sessions.size を観測して maxSessions を
   // 突破しないよう、同期的にこのカウンタで枠を予約する
@@ -353,7 +364,23 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
 
           try {
             // セッションごとに新しいサーバーインスタンスを使用
-            const sessionServer = serverFactory ? serverFactory() : server
+            let sessionServer: McpServer
+            if (serverFactory) {
+              sessionServer = serverFactory()
+            } else if (!sharedServerConsumed) {
+              sessionServer = server
+              sharedServerConsumed = true
+            } else {
+              await transport.close().catch(() => {})
+              console.log('Rejected initialize request: shared server already bound to a session')
+              return c.json(
+                badRequestError(
+                  'Server is single-session (no serverFactory configured) and a session is already bound. ' +
+                    'Provide serverFactory to support multiple sessions.'
+                ),
+                { status: 503 }
+              )
+            }
             try {
               await sessionServer.connect(transport)
             } catch (e) {

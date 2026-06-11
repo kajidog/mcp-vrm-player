@@ -289,6 +289,20 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
   }
 }
 
+/**
+ * デバウンス保存中の全ストアを即時書き込みする。
+ * stdio モードではクライアントにプロセスを kill されるため、終了フックから呼んで
+ * 直前の登録・設定変更が失われないようにする。
+ */
+export async function flushPlayerRuntime(): Promise<void> {
+  await Promise.allSettled([
+    sessionStateStore?.flush(),
+    vrmRegistryStore?.flush(),
+    poseRegistryStore?.flush(),
+    playerSettingsStore?.flush(),
+  ])
+}
+
 export function getPlayerRuntimeStores(): Pick<
   PlayerRuntime,
   'vrmRegistry' | 'poseRegistry' | 'playerSettings'
