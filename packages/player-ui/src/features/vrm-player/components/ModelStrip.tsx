@@ -2,6 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { PencilIcon, PlusCircleIcon } from '~/icons'
 import { fetchVrmListOnServer } from '../hooks/vrmPlayerToolClient'
+import { thumbnailDataUrl } from '../utils/playerResult'
 
 interface ModelStripEntry {
   id: string
@@ -72,11 +73,7 @@ export function ModelStrip({ app, activeModelId, busy, refreshKey, onSelect, onA
                 } disabled:opacity-70`}
               >
                 {item.thumbnailBase64 ? (
-                  <img
-                    src={`data:${item.thumbnailMimeType ?? 'image/png'};base64,${item.thumbnailBase64}`}
-                    alt={item.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={thumbnailDataUrl(item)} alt={item.name} className="h-full w-full object-cover" />
                 ) : (
                   <span className="max-w-9 truncate px-1">{shortName(item.name)}</span>
                 )}

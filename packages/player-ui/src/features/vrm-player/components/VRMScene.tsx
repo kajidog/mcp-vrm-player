@@ -549,12 +549,20 @@ export function VRMScene({
     }
     const poseSource = poseRef.current
     if (poseSource.kind === 'builtin') {
-      mixerRef.current?.stopAllAction()
-      actionRef.current = null
-      activeVrmaKeyRef.current = null
-      actionKeyRef.current = null
-      actionLoopsRef.current = false
-      fadingActionsRef.current = []
+      // vrma 再生からの遷移時だけアクションを停止する（毎フレームの stopAllAction は無駄）。
+      if (
+        actionRef.current ||
+        fadingActionsRef.current.length > 0 ||
+        activeVrmaKeyRef.current !== null ||
+        actionKeyRef.current !== null
+      ) {
+        mixerRef.current?.stopAllAction()
+        actionRef.current = null
+        activeVrmaKeyRef.current = null
+        actionKeyRef.current = null
+        actionLoopsRef.current = false
+        fadingActionsRef.current = []
+      }
       poseSource.applyToVrm(vrm, elapsedRef.current)
     } else if (actionRef.current || fadingActionsRef.current.length > 0 || loadedVrmaKey === activeVrmaKeyRef.current) {
       const action = actionRef.current

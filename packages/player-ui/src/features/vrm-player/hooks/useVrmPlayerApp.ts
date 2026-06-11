@@ -17,6 +17,7 @@ import {
   readModelManagerRequest,
   readModelPoses,
   readToolMeta,
+  thumbnailDataUrl,
 } from '../utils/playerResult'
 import {
   type PoseSegment,
@@ -79,6 +80,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const activeModelRef = useRef<VrmPlayerState['activeModel']>(null)
   const poseLibraryRef = useRef<Map<string, PoseSource>>(new Map())
   const audioLoadRequestRef = useRef(0)
+  // 後続セグメント音声の裏取得。再生がこの取得を追い越した時に useSegmentPlayback 側で待てるよう共有する。
+  const pendingAudioMergeRef = useRef<Promise<PoseSegment[]> | null>(null)
   // リップシンク制御。AudioContext は audio 生成の useEffect で attach し、
   // セグメント切替で setSegment を呼ぶ。mouthRef を VrmPlayerState に流して VRMScene で参照する。
   const lipSync = useLipSync()
@@ -86,14 +89,20 @@ export function useVrmPlayerApp(): VrmPlayerState {
   // 受け取った後に初期デフォルトの非同期適用が遅れて返ってきても上書きしないためのガード。
   const toolInteractedRef = useRef(false)
   const { replaceObjectUrl } = useRevokableObjectUrl()
+  // VRM 解決のレース対策。初期ロード / ツール入出力 / ユーザー操作の resolveVrmSource が並走するため、
+  // 解決開始ごとに世代を進め、await 後に世代が変わっていたらその解決は破棄する。
+  // 破棄時は自分が作った Object URL のみ revoke し、共有スロット(replaceObjectUrl)や表示状態には触れない。
+  const vrmLoadGenerationRef = useRef(0)
+  const beginVrmLoad = () => ++vrmLoadGenerationRef.current
+  const isStaleVrmLoad = (generation: number) => generation !== vrmLoadGenerationRef.current
 
   const setResolvedActiveModel = (model: VrmPlayerState['activeModel']) => {
     activeModelRef.current = model
     setActiveModel(model)
   }
 
-  const resolveCurrentPose = useCallback((poseName: string | undefined): PoseSource | null => {
-    return resolveSegmentPose(poseName, activeModelRef.current?.poses, poseLibraryRef.current)
+  const resolveCurrentPose = useCallback((poseName: string | undefined, seed?: number): PoseSource | null => {
+    return resolveSegmentPose(poseName, activeModelRef.current?.poses, poseLibraryRef.current, seed)
   }, [])
 
   const resolveCurrentExpression = useCallback((segment: PoseSegment | null): VrmPlayerState['expression'] => {
@@ -123,7 +132,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
     resolvePose: resolveCurrentPose,
     resolveExpression: resolveCurrentExpression,
     onError: setPlaybackError,
+    waitForPendingAudio: () => pendingAudioMergeRef.current,
   })
+  // onAppCreated 内のハンドラは初回レンダーのクロージャを掴み続けるため、
+  // ハンドラからの playback 参照は常にこの ref を経由する。
+  const playbackRef = useRef(playback)
+  playbackRef.current = playback
 
   const updateSpeakerIcon = async (speakerId: number | undefined): Promise<void> => {
     const requestId = speakerIconRequestRef.current + 1
@@ -180,11 +194,13 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const applyDefaultPayload = async (reason: string, shouldAbort: () => boolean = () => false): Promise<void> => {
     const currentApp = appRef.current
     if (!currentApp) return
+    const generation = beginVrmLoad()
+    const abort = () => shouldAbort() || isStaleVrmLoad(generation)
 
     try {
       setLoadingState('resolvingModel', 25)
       const resolved = await fetchDefaultVrmOnServer(currentApp)
-      if (shouldAbort()) return
+      if (abort()) return
       if (!resolved) {
         clearToEmpty()
         return
@@ -195,12 +211,12 @@ export function useVrmPlayerApp(): VrmPlayerState {
         error,
         revokeUrl,
       } = await resolveVrmSource(currentApp, resolved.payload, { isDefault: true })
-      setLoadingState('loadingVrm', 45)
-      if (shouldAbort()) {
+      if (abort()) {
         // 既に別系統の payload で表示が進んでいる時は、ここで作った Object URL は捨てる。
         if (revokeUrl) URL.revokeObjectURL(revokeUrl)
         return
       }
+      setLoadingState('loadingVrm', 45)
       replaceObjectUrl(revokeUrl ?? null)
 
       if (!defaultSource || error) {
@@ -222,10 +238,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
           speakerId: meta.speakerId,
           poses: meta.poses,
           emotionBindings: meta.emotionBindings,
-          thumbnailUrl:
-            meta.thumbnailBase64 !== undefined
-              ? `data:${meta.thumbnailMimeType ?? 'image/png'};base64,${meta.thumbnailBase64}`
-              : undefined,
+          thumbnailUrl: thumbnailDataUrl(meta),
         })
         void updateSpeakerIcon(meta.speakerId)
       }
@@ -233,7 +246,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
       setLoadingState('ready', 100)
       setErrorMsg('')
     } catch (error) {
-      if (shouldAbort()) return
+      if (abort()) return
       setResolvedSource(null)
       setStatus('error')
       setLoadingState('error', 100)
@@ -246,20 +259,23 @@ export function useVrmPlayerApp(): VrmPlayerState {
     if (!currentApp) return
     setLoadingState('resolvingModel', 25)
     if (modelId) {
+      const generation = beginVrmLoad()
       const { metadata, payload } = await fetchVrmModelOnServer(currentApp, modelId)
+      if (isStaleVrmLoad(generation)) return
       setResolvedActiveModel({
         id: metadata.id,
         name: metadata.name,
         speakerId: metadata.speakerId,
         poses: metadata.poses,
         emotionBindings: metadata.emotionBindings,
-        thumbnailUrl:
-          metadata.thumbnailBase64 !== undefined
-            ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-            : undefined,
+        thumbnailUrl: thumbnailDataUrl(metadata),
       })
       void updateSpeakerIcon(metadata.speakerId)
       const { source: nextSource, error, revokeUrl } = await resolveVrmSource(currentApp, payload, { isDefault: false })
+      if (isStaleVrmLoad(generation)) {
+        if (revokeUrl) URL.revokeObjectURL(revokeUrl)
+        return
+      }
       replaceObjectUrl(revokeUrl ?? null)
       setLoadingState('loadingVrm', 45)
       if (error || !nextSource) {
@@ -283,11 +299,16 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const applyPayload = async (payload: VrmPayload | null, settledStatus: SettledStatus) => {
     const currentApp = appRef.current
     if (!currentApp) return
+    const generation = beginVrmLoad()
 
     setLoadingModel(true)
     try {
       setLoadingState('resolvingModel', 25)
       const { source: nextSource, error, revokeUrl } = await resolveVrmSource(currentApp, payload)
+      if (isStaleVrmLoad(generation)) {
+        if (revokeUrl) URL.revokeObjectURL(revokeUrl)
+        return
+      }
       setLoadingState('loadingVrm', 45)
       replaceObjectUrl(revokeUrl ?? null)
 
@@ -312,12 +333,14 @@ export function useVrmPlayerApp(): VrmPlayerState {
       else setLoadingState(settledStatus === 'ready' ? 'ready' : 'waitingTool', settledStatus === 'ready' ? 100 : 20)
       setErrorMsg('')
     } catch (error) {
+      if (isStaleVrmLoad(generation)) return
       setResolvedSource(null)
       setStatus('error')
       setLoadingState('error', 100)
       setErrorMsg(`VRM の取得に失敗しました: ${String(error)}`)
     } finally {
-      setLoadingModel(false)
+      // 追い越された解決はローディング表示に触れない(現行世代側の finally が解除する)。
+      if (!isStaleVrmLoad(generation)) setLoadingModel(false)
     }
   }
 
@@ -362,7 +385,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         toolInteractedRef.current = true
         toolResultPendingRef.current = false
         if (result.isError) {
-          playback.clearSegments()
+          playbackRef.current.clearSegments()
           setStatus('error')
           setLoadingState('error', 100)
           setErrorMsg(extractErrorMessage(result))
@@ -435,7 +458,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
                   (progress) => setLoadingState('preparingAudio', progress)
                 )
                 ensurePlayableSegments(segmentsForPlayback.slice(0, initialIndexes.length), viewUUID)
-                playback.startPlayback(segmentsForPlayback, { autoPlay: consumeAutoPlay(meta) })
+                playbackRef.current.startPlayback(segmentsForPlayback, { autoPlay: consumeAutoPlay(meta) })
                 void updateSpeakerIcon(segmentsForPlayback[0]?.speaker)
                 setLoadingState('ready', 100)
 
@@ -443,14 +466,24 @@ export function useVrmPlayerApp(): VrmPlayerState {
                   .map((_, index) => index)
                   .filter((index) => !initialIndexes.includes(index))
                 if (remainingIndexes.length > 0) {
-                  void mergeSegmentAudioIndexes(createdApp, segmentsForPlayback, viewUUID, remainingIndexes)
+                  const mergePromise = mergeSegmentAudioIndexes(
+                    createdApp,
+                    segmentsForPlayback,
+                    viewUUID,
+                    remainingIndexes
+                  )
+                  pendingAudioMergeRef.current = mergePromise
+                  void mergePromise
                     .then((completeSegments) => {
                       if (requestId !== audioLoadRequestRef.current) return
-                      playback.updateSegments(completeSegments)
+                      playbackRef.current.updateSegments(completeSegments)
                     })
                     .catch((error) => {
                       if (requestId !== audioLoadRequestRef.current) return
                       setPlaybackError(`後続セグメントの音声取得に失敗しました: ${String(error)}`)
+                    })
+                    .finally(() => {
+                      if (pendingAudioMergeRef.current === mergePromise) pendingAudioMergeRef.current = null
                     })
                 }
                 return
@@ -463,11 +496,11 @@ export function useVrmPlayerApp(): VrmPlayerState {
               }
             }
             ensurePlayableSegments(segmentsForPlayback, viewUUID)
-            playback.startPlayback(segmentsForPlayback, { autoPlay: consumeAutoPlay(meta) })
+            playbackRef.current.startPlayback(segmentsForPlayback, { autoPlay: consumeAutoPlay(meta) })
             void updateSpeakerIcon(segmentsForPlayback[0]?.speaker)
             setLoadingState('ready', 100)
           } else if (isPlayerToolResult(result)) {
-            playback.clearSegments()
+            playbackRef.current.clearSegments()
             setLoadingState('ready', 100)
           }
         } catch (error) {
@@ -604,12 +637,19 @@ export function useVrmPlayerApp(): VrmPlayerState {
   const switchVrm = async (modelId: string): Promise<void> => {
     const currentApp = appRef.current
     if (!currentApp) return
+    // 連打や他系統の解決との競合は世代カウンタで決着する(古い解決は黙って破棄)。
+    const generation = beginVrmLoad()
 
     setLoadingModel(true)
     try {
       setLoadingState('resolvingModel', 25)
       const { metadata, payload } = await fetchVrmModelOnServer(currentApp, modelId)
+      if (isStaleVrmLoad(generation)) return
       const { source: nextSource, error, revokeUrl } = await resolveVrmSource(currentApp, payload, { isDefault: false })
+      if (isStaleVrmLoad(generation)) {
+        if (revokeUrl) URL.revokeObjectURL(revokeUrl)
+        return
+      }
       setLoadingState('loadingVrm', 45)
       replaceObjectUrl(revokeUrl ?? null)
 
@@ -629,10 +669,7 @@ export function useVrmPlayerApp(): VrmPlayerState {
         speakerId: metadata.speakerId,
         poses: metadata.poses,
         emotionBindings: metadata.emotionBindings,
-        thumbnailUrl:
-          metadata.thumbnailBase64 !== undefined
-            ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-            : undefined,
+        thumbnailUrl: thumbnailDataUrl(metadata),
       })
       void updateSpeakerIcon(metadata.speakerId)
       setStatus('ready')
@@ -641,31 +678,29 @@ export function useVrmPlayerApp(): VrmPlayerState {
       const existing = playback.segmentsRef.current
       if (existing.length > 0) {
         setLoadingState('preparingAudio', 65)
-        playback.startPlayback(
-          await resynthesizeSegments(
-            currentApp,
-            {
-              id: metadata.id,
-              name: metadata.name,
-              speakerId: metadata.speakerId,
-              poses: metadata.poses,
-              emotionBindings: metadata.emotionBindings,
-              thumbnailUrl:
-                metadata.thumbnailBase64 !== undefined
-                  ? `data:${metadata.thumbnailMimeType ?? 'image/png'};base64,${metadata.thumbnailBase64}`
-                  : undefined,
-            },
-            existing
-          )
+        const resynthesized = await resynthesizeSegments(
+          currentApp,
+          {
+            id: metadata.id,
+            name: metadata.name,
+            speakerId: metadata.speakerId,
+            poses: metadata.poses,
+            emotionBindings: metadata.emotionBindings,
+            thumbnailUrl: thumbnailDataUrl(metadata),
+          },
+          existing
         )
+        if (isStaleVrmLoad(generation)) return
+        playback.startPlayback(resynthesized)
       }
       setLoadingState('ready', 100)
     } catch (e) {
+      if (isStaleVrmLoad(generation)) return
       setStatus('error')
       setLoadingState('error', 100)
       setErrorMsg(`モデル切替に失敗しました: ${String(e)}`)
     } finally {
-      setLoadingModel(false)
+      if (!isStaleVrmLoad(generation)) setLoadingModel(false)
     }
   }
 
@@ -680,8 +715,8 @@ export function useVrmPlayerApp(): VrmPlayerState {
     expression: playback.expression,
     segments: playback.segments,
     currentSegmentIndex: playback.currentSegmentIndex,
-    currentTime: playback.currentTime,
-    duration: playback.duration,
+    subscribeTime: playback.subscribeTime,
+    getTimeSnapshot: playback.getTimeSnapshot,
     currentSegmentText: playback.currentSegmentText,
     currentSegmentGaze: playback.currentSegmentGaze,
     speakerIconUrl,

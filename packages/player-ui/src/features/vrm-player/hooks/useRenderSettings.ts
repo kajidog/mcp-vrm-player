@@ -50,6 +50,8 @@ export const POSE_EASING_OPTIONS: Array<{ value: RenderSettings['poseEasing']; l
 
 let currentSettings = DEFAULT_RENDER_SETTINGS
 const subscribers = new Set<(settings: RenderSettings) => void>()
+// このフックは複数箇所でマウントされるため、サーバー同期フェッチは app ごとに1回だけ走らせる。
+let syncedApp: App | null = null
 
 function normalize(input: PlayerRenderSettings | undefined): RenderSettings {
   const parsed = input ?? {}
@@ -135,10 +137,12 @@ export function useRenderSettings(app: App | null = null): {
 
   useEffect(() => {
     if (!app) return
-    let cancelled = false
+    // 結果はモジュールレベルのストアへ publish されるので、マウントごとにフェッチし直す
+    // 必要はない（3箇所マウントで3並列フェッチ＋設定の取り合いになっていた）。
+    if (syncedApp === app) return
+    syncedApp = app
     fetchPlayerSettingsOnServer(app)
       .then(async (response) => {
-        if (cancelled) return
         const legacy = response.overrides.renderSettings ? null : loadLegacySettings()
         const next = legacy ?? normalize(response.overrides.renderSettings)
         publish(next)
@@ -155,12 +159,11 @@ export function useRenderSettings(app: App | null = null): {
       })
       .catch((error) => {
         console.warn('[useRenderSettings] failed to fetch render settings:', error)
+        // 失敗時は同じ app での再マウント時に再試行できるようにする。
+        if (syncedApp === app) syncedApp = null
         const fallback = loadLegacySettings()
         if (fallback) publish(fallback)
       })
-    return () => {
-      cancelled = true
-    }
   }, [app])
 
   const update = (patch: Partial<RenderSettings>) => {

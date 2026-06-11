@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react'
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from '~/icons'
 
 interface TransportBarProps {
@@ -6,8 +7,9 @@ interface TransportBarProps {
   hasSegments: boolean
   currentIndex: number | null
   totalSegments: number
-  currentTime: number
-  duration: number
+  // 再生時刻はこのコンポーネントだけが購読し、親ツリーを 4Hz で再レンダーさせない。
+  subscribeTime: (listener: () => void) => () => void
+  getTimeSnapshot: () => { currentTime: number; duration: number }
   onPlay: () => void
   onPause: () => void
   onPrev: () => void
@@ -28,13 +30,14 @@ export function TransportBar({
   hasSegments,
   currentIndex,
   totalSegments,
-  currentTime,
-  duration,
+  subscribeTime,
+  getTimeSnapshot,
   onPlay,
   onPause,
   onPrev,
   onNext,
 }: TransportBarProps) {
+  const { currentTime, duration } = useSyncExternalStore(subscribeTime, getTimeSnapshot)
   const trackLabel = totalSegments > 0 ? `${(currentIndex ?? 0) + 1}/${totalSegments}` : '-/0'
 
   return (

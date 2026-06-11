@@ -9,7 +9,7 @@ import { getConfig, getConfigTemplate, getHelpText } from './config.js'
 import { createVrmOAuthHttpOptions } from './oauth.js'
 import { createServer, server } from './server.js'
 import { bindSessionAuth, forgetSessionUser } from './tools/auth-context.js'
-import { getPlayerRuntimeStores } from './tools/player/runtime.js'
+import { flushPlayerRuntime, getPlayerRuntimeStores } from './tools/player/runtime.js'
 import { registerVrmHttpRoutes } from './vrm-http.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -102,6 +102,7 @@ async function startMCPServer(): Promise<void> {
     config,
     serverName: 'MCP TTS',
     serverFactory: createServer,
+    onShutdown: flushPlayerRuntime,
     httpOptions: {
       extraCorsHeaders: ['X-TTS-Speaker'],
       ...createVrmOAuthHttpOptions(authConfig),

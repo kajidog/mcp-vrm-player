@@ -85,6 +85,11 @@ export class SessionStateStore {
     return this.state.get(key)
   }
 
+  /** 予約済みのデバウンス保存を即時書き込みする（終了処理・テスト用）。 */
+  async flush(): Promise<void> {
+    await this.file.flush()
+  }
+
   // -------------------------------------------------------------------------
   // Disk persistence
   // -------------------------------------------------------------------------

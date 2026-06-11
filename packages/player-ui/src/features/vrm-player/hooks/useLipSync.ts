@@ -197,6 +197,9 @@ const TAU_ATTACK = 0.04
 const TAU_RELEASE = 0.08
 // 振幅 × 形のハイブリッド時の、RMS=0 でも残す最低スケール。
 const RMS_FLOOR = 0.3
+// 音声停止かつ口が閉じ切った状態がこの時間続いたら rAF ループを止める。
+// （再生開始直後の「まだ paused」な瞬間に止めないための猶予）
+const IDLE_STOP_AFTER_MS = 1000
 
 export function useLipSync(): LipSyncController {
   const mouthRef = useRef<MouthValues>({ aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 })
@@ -209,6 +212,7 @@ export function useLipSync(): LipSyncController {
   const moraTimingOffsetMsRef = useRef(0)
   const rafRef = useRef<number | null>(null)
   const lastTickMsRef = useRef<number | null>(null)
+  const idleSinceMsRef = useRef<number | null>(null)
   const disposedRef = useRef(false)
 
   const tick = (nowMs: number) => {
@@ -291,10 +295,27 @@ export function useLipSync(): LipSyncController {
       if (Math.abs(m[ch]) < 1e-4) m[ch] = 0
     }
 
+    // アイドル検出: 音声が再生されておらず口も閉じ切っているなら、60fps ループを
+    // 回し続けない。再開は ensureLoop 経由（attachAudio / setSegment / resumeContext）。
+    const audioActive = Boolean(audio && !audio.paused && !audio.ended)
+    const mouthClosed = m.aa === 0 && m.ih === 0 && m.ou === 0 && m.ee === 0 && m.oh === 0
+    if (!audioActive && mouthClosed) {
+      if (idleSinceMsRef.current === null) idleSinceMsRef.current = nowMs
+      if (nowMs - idleSinceMsRef.current > IDLE_STOP_AFTER_MS) {
+        rafRef.current = null
+        lastTickMsRef.current = null
+        idleSinceMsRef.current = null
+        return
+      }
+    } else {
+      idleSinceMsRef.current = null
+    }
+
     rafRef.current = requestAnimationFrame(tick)
   }
 
   const ensureLoop = () => {
+    idleSinceMsRef.current = null
     if (rafRef.current === null && !disposedRef.current) {
       lastTickMsRef.current = null
       rafRef.current = requestAnimationFrame(tick)
@@ -339,6 +360,8 @@ export function useLipSync(): LipSyncController {
   }
 
   const resumeContext = () => {
+    // 再生開始の直前に呼ばれるため、アイドル停止していたループをここでも再開する。
+    ensureLoop()
     const ctx = audioCtxRef.current
     if (ctx && ctx.state === 'suspended') {
       void ctx.resume().catch(() => {

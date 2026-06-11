@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PoseSource } from '~/features/poses/types'
 import { base64ToBlobUrl } from '~/lib/binary'
 import type { VrmPlayerState } from '../types'
@@ -7,19 +7,43 @@ import type { LipSyncController } from './useLipSync'
 
 interface UseSegmentPlaybackOptions {
   lipSync: LipSyncController
-  resolvePose: (poseName: string | undefined) => PoseSource | null
+  resolvePose: (poseName: string | undefined, seed?: number) => PoseSource | null
   resolveExpression: (segment: PoseSegment | null) => VrmPlayerState['expression']
   onError: (message: string) => void
+  /** 裏で進行中の後続セグメント音声取得があればその Promise を返す（なければ null）。 */
+  waitForPendingAudio?: () => Promise<unknown> | null
 }
 
-export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, onError }: UseSegmentPlaybackOptions) {
+export function useSegmentPlayback({
+  lipSync,
+  resolvePose,
+  resolveExpression,
+  onError,
+  waitForPendingAudio,
+}: UseSegmentPlaybackOptions) {
   const [pose, setPose] = useState<PoseSource | null>(null)
   const [expression, setExpression] = useState<VrmPlayerState['expression']>(null)
   const [segments, setSegments] = useState<PoseSegment[]>([])
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
   const [paused, setPaused] = useState(false)
+  // 再生時刻は React state にせず外部ミニストアで配信する。timeupdate（約4Hz）のたびに
+  // 3D シーンを含むプレイヤー全体が再レンダーされるのを防ぎ、時刻表示だけが購読する。
+  const timeListenersRef = useRef(new Set<() => void>())
+  const timeSnapshotRef = useRef({ currentTime: 0, duration: 0 })
+  const publishTime = (patch: Partial<{ currentTime: number; duration: number }>) => {
+    const prev = timeSnapshotRef.current
+    const next = { ...prev, ...patch }
+    if (next.currentTime === prev.currentTime && next.duration === prev.duration) return
+    timeSnapshotRef.current = next
+    for (const listener of timeListenersRef.current) listener()
+  }
+  const subscribeTime = useCallback((listener: () => void) => {
+    timeListenersRef.current.add(listener)
+    return () => {
+      timeListenersRef.current.delete(listener)
+    }
+  }, [])
+  const getTimeSnapshot = useCallback(() => timeSnapshotRef.current, [])
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
   const segmentsRef = useRef<PoseSegment[]>([])
@@ -49,8 +73,7 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
     }
     releaseAudioUrl()
     lipSync.setSegment(null)
-    setCurrentTime(0)
-    setDuration(0)
+    publishTime({ currentTime: 0, duration: 0 })
     setExpression(null)
     setCurrentSegmentIndex(null)
   }
@@ -79,9 +102,8 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
 
     playbackIndexRef.current = index
     setCurrentSegmentIndex(index)
-    setCurrentTime(0)
-    setDuration(0)
-    setPose(resolvePose(current.pose ?? 'idle'))
+    publishTime({ currentTime: 0, duration: 0 })
+    setPose(resolvePose(current.pose ?? 'idle', index))
     setExpression(resolveExpression(current))
 
     const audio = audioRef.current
@@ -92,16 +114,42 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
       return
     }
     if (!current.audioBase64) {
+      // 先頭セグメントのみ先行取得して再生開始するため、再生や「次へ」が裏の取得を
+      // 追い越すことがある。進行中の取得があれば完了を待ってから再試行し、
+      // それでも音声がない場合のみエラーにする。
+      const pending = waitForPendingAudio?.()
+      if (pending) {
+        void pending
+          .then(() => {
+            if (version !== playbackVersionRef.current) return
+            if (!segmentsRef.current[index]?.audioBase64) {
+              failPlayback(`セグメント ${index + 1} の音声データがありません。`)
+              return
+            }
+            playSegmentAt(index, version)
+          })
+          .catch(() => {
+            // 取得失敗は useVrmPlayerApp 側の catch がエラー表示するため、ここでは何もしない。
+          })
+        return
+      }
       failPlayback(`セグメント ${index + 1} の音声データがありません。`)
       return
     }
 
-    const url = base64ToBlobUrl(current.audioBase64, current.audioMimeType ?? 'audio/wav')
+    let url: string
+    try {
+      url = base64ToBlobUrl(current.audioBase64, current.audioMimeType ?? 'audio/wav')
+    } catch {
+      // base64 が壊れている場合、onended 連鎖の中で未捕捉例外にせずエラー表示に落とす。
+      failPlayback(`セグメント ${index + 1} の音声データを読み込めませんでした。`)
+      return
+    }
     audioUrlRef.current = url
     audio.src = url
     audio.onended = () => {
       if (version !== playbackVersionRef.current) return
-      setCurrentTime(Number.isFinite(audio.duration) ? audio.duration : 0)
+      publishTime({ currentTime: Number.isFinite(audio.duration) ? audio.duration : 0 })
       playSegmentAt(index + 1, version)
     }
     audio.onerror = () => {
@@ -162,6 +210,11 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
         })
         return
       }
+      // 一時停止中に audio.src が失われていた場合は、現在のセグメントから再生し直す。
+      if (currentSegmentIndex !== null) {
+        jumpTo(currentSegmentIndex)
+        return
+      }
     }
 
     if (currentSegmentIndex === null) {
@@ -209,15 +262,15 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
 
   const refreshCurrentVisuals = () => {
     const currentSegment = currentSegmentIndex !== null ? segmentsRef.current[currentSegmentIndex] : null
-    setPose(resolvePose(currentSegment?.pose ?? 'idle'))
+    setPose(resolvePose(currentSegment?.pose ?? 'idle', currentSegmentIndex ?? undefined))
     setExpression(resolveExpression(currentSegment))
   }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: stopPlayback uses refs only and is stable across renders
   useEffect(() => {
     const audio = new Audio()
-    const updateTime = () => setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0)
-    const updateDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const updateTime = () => publishTime({ currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0 })
+    const updateDuration = () => publishTime({ duration: Number.isFinite(audio.duration) ? audio.duration : 0 })
     audio.addEventListener('timeupdate', updateTime)
     audio.addEventListener('loadedmetadata', updateDuration)
     audioRef.current = audio
@@ -237,8 +290,8 @@ export function useSegmentPlayback({ lipSync, resolvePose, resolveExpression, on
     segments,
     segmentsRef,
     currentSegmentIndex,
-    currentTime,
-    duration,
+    subscribeTime,
+    getTimeSnapshot,
     isPlaying: currentSegmentIndex !== null && !paused,
     canReplay: currentSegmentIndex === null && segments.length > 0,
     hasSegments: segments.length > 0,

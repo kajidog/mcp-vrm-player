@@ -4,7 +4,7 @@ export function getProtectedResourceMetadataUrl(config: OAuthConfig): string {
   return new URL('/.well-known/oauth-protected-resource', config.mcpServerUrl).toString()
 }
 
-export function getProtectedResourceIdentifier(config: OAuthConfig): string {
+export function getProtectedResourceIdentifier(config: Pick<OAuthConfig, 'mcpServerUrl'>): string {
   const url = new URL(config.mcpServerUrl)
   const path = url.pathname.replace(/\/+$/, '')
   if (path === '/mcp') return url.toString()

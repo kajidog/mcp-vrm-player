@@ -5,9 +5,12 @@
  * @returns never（常に例外をスロー）
  */
 export function handleError(message: string, error: unknown): never {
+  // VoicevoxError はコード・detail・スタックを保ったまま伝搬させる。
+  // ここで再ラップ＋ログすると engine → service → client の各層で三重に
+  // ラップ・出力されるため、ログは消費側（境界）に任せる。
+  if (error instanceof VoicevoxError) throw error
   const errorMsg = error instanceof Error ? error.message : String(error)
-  console.error(`${message}: ${errorMsg}`, error)
-  throw new Error(`${message}: ${errorMsg}`)
+  throw new VoicevoxError(`${message}: ${errorMsg}`, VoicevoxErrorCode.UNKNOWN_ERROR, error)
 }
 
 /**
@@ -32,6 +35,8 @@ export class VoicevoxError extends Error {
     this.name = 'VoicevoxError'
     this.code = code
     this.originalError = originalError
+    // Error.cause としても連鎖させ、標準のエラー連鎖表示（Node の出力等）で原因を辿れるようにする。
+    if (originalError !== undefined) (this as Error & { cause?: unknown }).cause = originalError
   }
 
   /**

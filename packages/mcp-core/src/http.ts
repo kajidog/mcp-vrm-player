@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
@@ -107,6 +107,43 @@ function resolveAuthSubject(authInfo?: AuthInfo): string | undefined {
   return undefined
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1'
+}
+
+/**
+ * Origin が allowlist に含まれるかをポート込みの完全一致で判定する。
+ * （URL の origin 同士を比較するので、デフォルトポートの正規化は URL に任せる）
+ *
+ * 例外として、allowlist エントリがループバック（localhost / 127.0.0.1 / [::1]）かつ
+ * ポート無指定の場合は任意ポートを許可する。開発サーバーのポートを逐一列挙しなくても
+ * 既定の `http://localhost` 等でローカルクライアントが使えるようにするためで、
+ * 非ループバックの Origin は常にポート込みの完全一致を要求する。
+ */
+function isAllowedOrigin(origin: string, config: BaseServerConfig): boolean {
+  let originUrl: URL
+  try {
+    originUrl = new URL(origin)
+  } catch {
+    return false
+  }
+  return config.allowedOrigins.some((allowed) => {
+    let allowedUrl: URL
+    try {
+      allowedUrl = new URL(allowed)
+    } catch {
+      return false
+    }
+    if (originUrl.origin === allowedUrl.origin) return true
+    return (
+      allowedUrl.port === '' &&
+      isLoopbackHostname(allowedUrl.hostname) &&
+      originUrl.protocol === allowedUrl.protocol &&
+      originUrl.hostname === allowedUrl.hostname
+    )
+  })
+}
+
 /**
  * Origin検証ミドルウェア
  */
@@ -118,26 +155,9 @@ function validateOrigin(config: BaseServerConfig) {
       return next()
     }
 
-    try {
-      const originUrl = new URL(origin)
-      const originWithoutPort = `${originUrl.protocol}//${originUrl.hostname}`
-
-      const isAllowed = config.allowedOrigins.some((allowed) => {
-        try {
-          const allowedUrl = new URL(allowed)
-          return originWithoutPort === `${allowedUrl.protocol}//${allowedUrl.hostname}`
-        } catch {
-          return false
-        }
-      })
-
-      if (!isAllowed) {
-        console.log(`Rejected request with invalid Origin: ${origin} (allowed: ${config.allowedOrigins.join(', ')})`)
-        return c.json(forbiddenError('Forbidden: Invalid Origin header'), { status: 403 })
-      }
-    } catch {
-      console.log(`Rejected request with malformed Origin: ${origin}`)
-      return c.json(forbiddenError('Forbidden: Malformed Origin header'), { status: 403 })
+    if (!isAllowedOrigin(origin, config)) {
+      console.log(`Rejected request with invalid Origin: ${origin} (allowed: ${config.allowedOrigins.join(', ')})`)
+      return c.json(forbiddenError('Forbidden: Invalid Origin header'), { status: 403 })
     }
 
     return next()
@@ -151,8 +171,10 @@ function validateHost(config: BaseServerConfig) {
   return async (c: Context, next: Next) => {
     const host = c.req.header('Host')
 
+    // Host ヘッダーなしは検証不能なので fail-closed で拒否する。
     if (!host) {
-      return next()
+      console.log('Rejected request with missing Host header')
+      return c.json(forbiddenError('Forbidden: Missing Host header'), { status: 403 })
     }
 
     const hostname = host.includes(':') ? host.split(':')[0] : host
@@ -166,6 +188,21 @@ function validateHost(config: BaseServerConfig) {
   }
 }
 
+/** タイミング攻撃を避けるため定数時間で API キーを比較する。 */
+export function isValidApiKey(providedKey: string | undefined, expectedKey: string): boolean {
+  if (!providedKey) return false
+  const provided = Buffer.from(providedKey)
+  const expected = Buffer.from(expectedKey)
+  return provided.length === expected.length && timingSafeEqual(provided, expected)
+}
+
+/** リクエストヘッダー（X-API-Key / Authorization: Bearer）から API キー候補を取り出す。 */
+export function extractApiKey(headers: { apiKeyHeader?: string; authorizationHeader?: string }): string | undefined {
+  const { apiKeyHeader, authorizationHeader } = headers
+  const bearerToken = authorizationHeader?.startsWith('Bearer ') ? authorizationHeader.slice(7).trim() : undefined
+  return apiKeyHeader ?? bearerToken
+}
+
 /**
  * APIキー検証ミドルウェア
  */
@@ -175,12 +212,12 @@ function validateApiKey(config: BaseServerConfig) {
       return next()
     }
 
-    const xApiKey = c.req.header('X-API-Key')
-    const authorization = c.req.header('Authorization')
-    const bearerToken = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : undefined
-    const providedKey = xApiKey ?? bearerToken
+    const providedKey = extractApiKey({
+      apiKeyHeader: c.req.header('X-API-Key'),
+      authorizationHeader: c.req.header('Authorization'),
+    })
 
-    if (providedKey !== config.apiKey) {
+    if (!isValidApiKey(providedKey, config.apiKey)) {
       console.log('Rejected request with invalid API key')
       return c.json(unauthorizedError('Unauthorized: Invalid API key'), { status: 401 })
     }
@@ -218,6 +255,17 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
     lastActivity: number
   }
   const sessions: Map<string, SessionEntry> = new Map()
+
+  // serverFactory 未指定時は共有 server を使えるセッションは1つだけ。
+  // SDK の Server は一度 connect すると再 connect できないため、2セッション目以降は
+  // 不透明な 500 ではなく明示的なエラーで拒否する。close 後も再利用はしない。
+  let sharedServerConsumed = false
+  if (!serverFactory) {
+    console.warn(
+      '[mcp-core] serverFactory not provided; HTTP mode will support only a single session. ' +
+        'Provide serverFactory to support multiple sessions.'
+    )
+  }
 
   // initialize 処理中（onsessioninitialized 前）のセッション数。
   // 並行 initialize が全員同じ sessions.size を観測して maxSessions を
@@ -353,7 +401,23 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
 
           try {
             // セッションごとに新しいサーバーインスタンスを使用
-            const sessionServer = serverFactory ? serverFactory() : server
+            let sessionServer: McpServer
+            if (serverFactory) {
+              sessionServer = serverFactory()
+            } else if (!sharedServerConsumed) {
+              sessionServer = server
+              sharedServerConsumed = true
+            } else {
+              await transport.close().catch(() => {})
+              console.log('Rejected initialize request: shared server already bound to a session')
+              return c.json(
+                badRequestError(
+                  'Server is single-session (no serverFactory configured) and a session is already bound. ' +
+                    'Provide serverFactory to support multiple sessions.'
+                ),
+                { status: 503 }
+              )
+            }
             try {
               await sessionServer.connect(transport)
             } catch (e) {
@@ -406,10 +470,12 @@ export function createHttpApp(options: CreateHttpAppOptions): Hono<{ Variables: 
     ...extraCorsHeaders,
   ]
 
+  // CORS は Origin 検証と同じ allowlist で判定する。'*' を返すとプリフライトが
+  // validateOrigin より先に許可応答してしまうため、許可した Origin のみ echo する。
   app.use(
     '/mcp',
     cors({
-      origin: '*',
+      origin: (origin) => (isAllowedOrigin(origin, config) ? origin : null),
       allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowHeaders,
       exposeHeaders: ['mcp-session-id', 'mcp-protocol-version'],

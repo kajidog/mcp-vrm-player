@@ -38,6 +38,11 @@ export interface LaunchOptions {
   /** セッションごとに新しい McpServer を生成するファクトリ関数（HTTPモード用） */
   serverFactory?: () => McpServer
   httpOptions?: Omit<CreateHttpAppOptions, 'server' | 'config' | 'serverFactory'>
+  /**
+   * SIGINT / SIGTERM 受信時、プロセス終了前に呼ばれるフック。
+   * デバウンス保存中のストアの flush 等、未書き込みの状態を退避するために使う。
+   */
+  onShutdown?: () => Promise<void> | void
 }
 
 /**
@@ -103,12 +108,8 @@ export async function startHttpServer(options: LaunchOptions): Promise<void> {
  */
 export async function startStdioServer(options: LaunchOptions): Promise<void> {
   try {
+    // シグナルハンドリングは launchServer 側で登録する（HTTP/stdio 共通）。
     await connectStdio(options.server)
-
-    // Stdio サーバーは常に実行中なので、プロセス終了までブロック
-    process.on('SIGINT', () => {
-      process.exit(0)
-    })
   } catch (error) {
     console.error('Stdio server startup failed:', error)
     if (error instanceof Error) {
@@ -125,10 +126,32 @@ export async function startStdioServer(options: LaunchOptions): Promise<void> {
 /**
  * MCP サーバーを起動する（HTTP/Stdioの自動切り替え）
  */
+const SHUTDOWN_FLUSH_TIMEOUT_MS = 2000
+
+/** SIGINT / SIGTERM で onShutdown フックを実行してから終了するハンドラを登録する。 */
+function registerShutdownHandlers(options: LaunchOptions): void {
+  const shutdown = async (signal: NodeJS.Signals) => {
+    console.error(`Received ${signal}, shutting down...`)
+    try {
+      // stdio モードではクライアントに kill されるため、flush は短いタイムアウト付きで待つ。
+      await Promise.race([
+        Promise.resolve(options.onShutdown?.()),
+        new Promise((resolve) => setTimeout(resolve, SHUTDOWN_FLUSH_TIMEOUT_MS)),
+      ])
+    } catch (error) {
+      console.error('Shutdown hook failed:', error)
+    }
+    process.exit(0)
+  }
+  process.once('SIGINT', () => void shutdown('SIGINT'))
+  process.once('SIGTERM', () => void shutdown('SIGTERM'))
+}
+
 export async function launchServer(options: LaunchOptions): Promise<void> {
   const { config } = options
 
   try {
+    if (isNodejs()) registerShutdownHandlers(options)
     if (config.httpMode) {
       await startHttpServer(options)
     } else {

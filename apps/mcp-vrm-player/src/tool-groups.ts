@@ -6,39 +6,26 @@
  */
 export const TOOL_GROUPS: Record<string, string[]> = {
   /** All player UI tools */
-  player: [
-    'start_here',
-    'speak_player',
-    'find_models',
-    'open_model_manager',
-    'resynthesize_player',
-    'get_player_state',
-    'open_dictionary_ui',
-    'list_vrms',
-    'set_default_model',
-  ],
-  /** Dictionary read/write tools kept for backward-compatible --disable-groups handling */
-  dictionary: [
-    'get_accent_phrases',
-    'get_user_dictionary',
-    'add_user_dictionary_word',
-    'update_user_dictionary_word',
-    'delete_user_dictionary_word',
-    'add_user_dictionary_words',
-    'update_user_dictionary_words',
-  ],
-  /** File synthesis tools kept for backward-compatible --disable-groups handling */
-  file: ['synthesize_file'],
+  player: ['start_here', 'speak_player', 'find_models', 'open_model_manager', 'list_vrms', 'set_default_model'],
+  /**
+   * Dictionary tools were removed from this server; the group name is kept so
+   * existing --disable-groups dictionary configurations don't start erroring.
+   */
+  dictionary: [],
+  /**
+   * File synthesis tools were removed from this server; the group name is kept so
+   * existing --disable-groups file configurations don't start erroring.
+   */
+  file: [],
   /** MCP App tools (tools registered as UI apps, i.e. with registerAppTool) */
   apps: [
     'speak_player',
     'open_model_manager',
-    'resynthesize_player',
-    'open_dictionary_ui',
     '_get_speakers_for_player',
     '_get_speaker_icon_for_player',
     '_test_speak_for_player',
     '_resynthesize_for_player',
+    '_get_player_audio_for_player',
     '_get_player_settings_for_player',
     '_set_player_settings_for_player',
     '_list_vrms_for_player',
@@ -48,6 +35,11 @@ export const TOOL_GROUPS: Record<string, string[]> = {
     '_replace_vrm_binary_for_player',
     '_delete_vrm_for_player',
     '_resolve_default_vrm_for_player',
+    '_list_poses_for_player',
+    '_get_pose_for_player',
+    '_register_pose_for_player',
+    '_update_pose_for_player',
+    '_delete_pose_for_player',
   ],
 }
 

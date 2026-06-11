@@ -21,7 +21,8 @@ const authConfig: OAuthConfig = {
   mcpServerUrl: 'http://localhost:3000',
   authServerUrl: 'http://localhost:3001',
   jwksUri: 'http://localhost:3001/.well-known/jwks.json',
-  audience: 'http://localhost:3000',
+  issuer: 'http://localhost:3001',
+  audience: 'http://localhost:3000/mcp',
   scopesSupported: ['openid', 'email', 'profile'],
   resourceName: 'VRM MCP Server',
 }
@@ -165,11 +166,71 @@ describe('OAuth HTTP auth', () => {
   })
 })
 
+describe('Origin validation', () => {
+  it('ループバックはポート無指定の allowlist エントリで任意ポートを許可する', async () => {
+    const app = createApp()
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://localhost:5173',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    // Origin/Host 検証は通過し、initialize でないため 400 になる（403 ではない）。
+    expect(response.status).toBe(400)
+  })
+
+  it('allowlist 外の Origin は 403 で拒否する', async () => {
+    const app = createApp()
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://evil.example.com',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('非ループバックはポート込みの完全一致を要求する', async () => {
+    const app = createApp({
+      config: { ...baseConfig, allowedOrigins: ['http://example.com'] },
+    })
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'localhost',
+        Origin: 'http://example.com:8080',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(403)
+  })
+})
+
 describe('VRM OAuth HTTP options', () => {
   it('VRM 固有の resource name はアプリ側デフォルトから作る', () => {
-    expect(createOAuthConfig({ ...baseConfig, oauthEnabled: true }, { resourceName: 'VRM MCP Server' })).toEqual(
-      authConfig
-    )
+    expect(
+      createOAuthConfig(
+        { ...baseConfig, oauthEnabled: true, oauthIssuer: 'http://localhost:3001' },
+        { resourceName: 'VRM MCP Server' }
+      )
+    ).toEqual(authConfig)
+  })
+
+  it('OAuth 有効時に issuer 未設定なら起動時エラーになる', () => {
+    expect(() => createOAuthConfig({ ...baseConfig, oauthEnabled: true })).toThrow(/issuer/i)
   })
 
   it('/mcp を保護対象として渡す', () => {

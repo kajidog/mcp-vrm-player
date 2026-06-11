@@ -98,7 +98,18 @@ export class SakuraAiEngine implements TtsEngine {
   }
 
   public async checkHealth(): Promise<{ connected: boolean; url: string }> {
-    return { connected: true, url: this.baseUrl }
+    try {
+      // 専用のヘルスエンドポイントがないため、最小の audio_query で実際の疎通を確認する。
+      await this.http.request<AudioQuery>(
+        'post',
+        `/tts/v1/audio_query?text=${encodeURIComponent('あ')}&speaker=3`,
+        null,
+        { Accept: 'application/json' }
+      )
+      return { connected: true, url: this.baseUrl }
+    } catch {
+      return { connected: false, url: this.baseUrl }
+    }
   }
 
   public async getSpeakers(): Promise<Speaker[]> {
