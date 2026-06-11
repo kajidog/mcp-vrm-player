@@ -52,9 +52,11 @@ export function useVrmFileDrop({ onFile }: UseVrmFileDropArgs) {
       accept: '.vrm,model/gltf-binary,application/octet-stream',
       className: 'hidden',
       onChange: async (event: React.ChangeEvent<HTMLInputElement>) => {
-        await loadFirstFile(event.currentTarget.files)
+        // await 後は React が event.currentTarget を null 化するため、先に要素を捕捉する。
+        const input = event.currentTarget
+        await loadFirstFile(input.files)
         // 同じファイルを連続選択しても onChange が発火するように value をリセット。
-        event.currentTarget.value = ''
+        input.value = ''
       },
     },
   }
