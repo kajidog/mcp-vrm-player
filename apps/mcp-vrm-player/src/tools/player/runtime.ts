@@ -247,7 +247,11 @@ export function createPlayerRuntime(deps: ToolDeps): PlayerRuntime {
     const audioData = await playerEngine.synthesize(resolvedQuery, resolved.speaker)
     const base64Audio = Buffer.from(audioData).toString('base64')
     await cache.writeCachedBase64(cacheKey, base64Audio)
-    void cache.writeCachedQuery(cacheKey, resolvedQuery)
+    // サイドカー保存は失敗しても致命的ではないが、unhandled rejection でプロセスが
+    // 落ちないように明示的に握りつぶす。
+    cache.writeCachedQuery(cacheKey, resolvedQuery).catch((error) => {
+      console.warn('Warning: failed to write TTS player query cache:', error)
+    })
     return {
       audioBase64: base64Audio,
       text: resolved.text,

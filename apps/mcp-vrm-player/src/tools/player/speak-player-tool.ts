@@ -4,7 +4,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
 import { resolveUserId } from '../auth-context.js'
-import { EMOTION_NAMES, type EmotionBinding, type EmotionName, normalizeEmotion } from '../emotions.js'
+import { EMOTION_NAMES, type EmotionName, normalizeEmotion, resolveEmotionBinding } from '../emotions.js'
 import { EMOTION_GUIDE, getRegistrationGuide } from '../guidance.js'
 import { BUILTIN_POSE_IDS, isBuiltinPoseResourceId, toBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled } from '../registration.js'
@@ -263,13 +263,6 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
       }
     }
   )
-}
-
-function resolveEmotionBinding(
-  bindings: EmotionBinding[] | undefined,
-  emotion: EmotionName
-): EmotionBinding | undefined {
-  return bindings?.find((binding) => binding.emotion === emotion)
 }
 
 function resolveVrmModel(runtime: PlayerRuntime, userId: string, usePublicVrms: boolean, modelId: string | undefined) {

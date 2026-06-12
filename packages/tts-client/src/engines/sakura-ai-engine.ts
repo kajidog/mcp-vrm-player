@@ -1,6 +1,6 @@
 import { handleError } from '../error.js'
 import type { AccentPhrase, AudioQuery, Speaker, SpeakerInfo, UserDictionaryWord } from '../types.js'
-import { HttpClient } from './http-client.js'
+import { HttpClient, SYNTHESIS_TIMEOUT_MS } from './http-client.js'
 import type {
   DictionaryWordInput,
   DictionaryWordUpdateInput,
@@ -139,7 +139,9 @@ export class SakuraAiEngine implements TtsEngine {
           'Content-Type': 'application/json',
           Accept: 'audio/wav',
         },
-        'arraybuffer'
+        'arraybuffer',
+        // 長文の合成はメタデータ系の既定 30 秒を超えることがある。
+        { timeoutMs: SYNTHESIS_TIMEOUT_MS }
       )
     } catch (error) {
       throw handleError('Sakura AI Engine 音声合成中にエラーが発生しました', error)
@@ -162,7 +164,8 @@ export class SakuraAiEngine implements TtsEngine {
           'Content-Type': 'application/json',
           Accept: 'audio/wav',
         },
-        'arraybuffer'
+        'arraybuffer',
+        { timeoutMs: SYNTHESIS_TIMEOUT_MS }
       )
     } catch (error) {
       throw handleError('Sakura AI Engine direct speech 合成中にエラーが発生しました', error)

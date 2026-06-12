@@ -15,6 +15,22 @@ export type VrmPlayerLoadingPhase =
   | 'ready'
   | 'error'
 
+// 再生位置・操作ボタンに必要な状態と操作をひとまとめにした transport。
+// VRMPlayer → PlayerHeader/VRMCanvas へ個別 prop を引き回さないための束。
+export interface PlayerTransport {
+  isPlaying: boolean
+  canReplay: boolean
+  hasSegments: boolean
+  currentIndex: number | null
+  totalSegments: number
+  subscribeTime: (listener: () => void) => () => void
+  getTimeSnapshot: () => { currentTime: number; duration: number }
+  onPlay: () => void
+  onPause: () => void
+  onPrev: () => void
+  onNext: () => void
+}
+
 // 解決済みの VRM ソース。url 経由なら src、バイナリ展開済みなら data を持つ。
 export interface VrmSource {
   src?: string

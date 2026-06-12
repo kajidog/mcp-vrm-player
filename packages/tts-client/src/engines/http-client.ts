@@ -14,6 +14,20 @@ export interface HttpClientOptions {
   }
 }
 
+export interface HttpRequestOptions {
+  /** このリクエストだけ既定タイムアウトを上書きする（例: 長文の音声合成）。 */
+  timeoutMs?: number
+}
+
+export const DEFAULT_TIMEOUT_MS = 30000
+
+/**
+ * 音声合成リクエスト用の長めのタイムアウト。
+ * 長文テキストや低速なハードウェアでは合成が既定の 30 秒を超えることがあるため、
+ * メタデータ系（audio_query 等）とは別に余裕を持たせる。
+ */
+export const SYNTHESIS_TIMEOUT_MS = 120000
+
 export class HttpClient {
   public readonly baseUrl: string
   private readonly defaultHeaders: Record<string, string>
@@ -25,7 +39,7 @@ export class HttpClient {
   constructor(options: HttpClientOptions) {
     this.baseUrl = normalizeUrl(options.baseUrl)
     this.defaultHeaders = options.defaultHeaders ?? {}
-    this.timeoutMs = options.timeoutMs ?? 30000
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     this.maxRetries = options.retry?.maxRetries ?? 0
     this.baseDelayMs = options.retry?.baseDelayMs ?? 500
     this.retryStatuses = new Set(options.retry?.retryStatuses ?? [429])
@@ -36,8 +50,10 @@ export class HttpClient {
     endpoint: string,
     data: unknown = null,
     headers: Record<string, string> = {},
-    responseType: ResponseType = 'json'
+    responseType: ResponseType = 'json',
+    options: HttpRequestOptions = {}
   ): Promise<T> {
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       const init: RequestInit = {
         method: method.toUpperCase(),
@@ -45,7 +61,7 @@ export class HttpClient {
           ...this.defaultHeaders,
           ...headers,
         },
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       }
 
       if (data !== null) {

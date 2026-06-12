@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  AsyncLock,
   DebouncedJsonFile,
   decodeAndValidateGlbBase64,
   normalizeOwnerUserId,
@@ -41,6 +42,9 @@ export class PoseRegistryStore {
   private readonly registry = new Map<string, PoseResource>()
   private readonly file: DebouncedJsonFile
   private readonly poseDir: string
+  // 書き込み系（register / delete）を直列化して、await 中の並行リクエストが
+  // 同じ ID のファイルを上書きし合う TOCTOU を防ぐ。
+  private readonly writeLock = new AsyncLock()
 
   constructor(options: PoseRegistryStoreOptions) {
     this.file = new DebouncedJsonFile(
@@ -78,27 +82,27 @@ export class PoseRegistryStore {
 
   async register(input: RegisterPoseInput): Promise<PoseResource> {
     const id = validatePoseId(input.id)
-    if (this.registry.has(id)) throw new Error(`Pose already exists: ${id}`)
     const buffer = decodeAndValidateVrmaBase64(input.vrmaBase64)
-    const vrmaFilePath = join(this.poseDir, `${id}.vrma`)
-    await writeBinaryAtomic(vrmaFilePath, buffer)
-    // await中に同じIDが並行登録されている可能性があるため再確認する（TOCTOU対策）。
-    if (this.registry.has(id)) throw new Error(`Pose already exists: ${id}`)
+    return this.writeLock.run(async () => {
+      if (this.registry.has(id)) throw new Error(`Pose already exists: ${id}`)
+      const vrmaFilePath = join(this.poseDir, `${id}.vrma`)
+      await writeBinaryAtomic(vrmaFilePath, buffer)
 
-    const now = Date.now()
-    const pose: PoseResource = {
-      id,
-      ownerUserId: normalizeOwnerUserId(input.ownerUserId),
-      ...(input.name?.trim() ? { name: input.name.trim() } : {}),
-      vrmaFilePath,
-      vrmaSizeBytes: buffer.byteLength,
-      loop: input.loop,
-      createdAt: now,
-      updatedAt: now,
-    }
-    this.registry.set(id, pose)
-    this.file.scheduleSave()
-    return pose
+      const now = Date.now()
+      const pose: PoseResource = {
+        id,
+        ownerUserId: normalizeOwnerUserId(input.ownerUserId),
+        ...(input.name?.trim() ? { name: input.name.trim() } : {}),
+        vrmaFilePath,
+        vrmaSizeBytes: buffer.byteLength,
+        loop: input.loop,
+        createdAt: now,
+        updatedAt: now,
+      }
+      this.registry.set(id, pose)
+      this.file.scheduleSave()
+      return pose
+    })
   }
 
   update(id: string, fields: UpdatePoseInput, ownerUserId?: string): PoseResource {
@@ -117,16 +121,18 @@ export class PoseRegistryStore {
   }
 
   async delete(id: string, ownerUserId?: string): Promise<void> {
-    const existing = this.registry.get(id)
-    if (!existing) return
-    assertOwner(existing, ownerUserId)
-    this.registry.delete(id)
-    this.file.scheduleSave()
-    try {
-      if (existsSync(existing.vrmaFilePath)) await unlink(existing.vrmaFilePath)
-    } catch (error) {
-      console.warn(`Warning: failed to delete VRMA file ${existing.vrmaFilePath}:`, error)
-    }
+    return this.writeLock.run(async () => {
+      const existing = this.registry.get(id)
+      if (!existing) return
+      assertOwner(existing, ownerUserId)
+      this.registry.delete(id)
+      this.file.scheduleSave()
+      try {
+        if (existsSync(existing.vrmaFilePath)) await unlink(existing.vrmaFilePath)
+      } catch (error) {
+        console.warn(`Warning: failed to delete VRMA file ${existing.vrmaFilePath}:`, error)
+      }
+    })
   }
 
   readVrmaBase64(id: string): string {

@@ -1,8 +1,10 @@
 import type { App } from '@modelcontextprotocol/ext-apps'
 import type { PoseSource } from '~/features/poses/types'
+import { usePlayerChrome } from '../PlayerChromeContext'
 import type { MouthRef } from '../hooks/useLipSync'
-import type { VrmPlayerState, VrmSource } from '../types'
+import type { PlayerTransport, VrmPlayerState, VrmSource } from '../types'
 import { PlayerHeader } from './PlayerHeader'
+import { RenderSettingsButton, RenderSettingsPanel } from './RenderSettingsPanel'
 import { VRMCanvas } from './VRMCanvas'
 
 interface VRMPlayerProps {
@@ -15,32 +17,12 @@ interface VRMPlayerProps {
   gaze: VrmPlayerState['currentSegmentGaze']
   activeModelId: string | null
   listRefreshKey: number
-  isPlaying: boolean
-  canReplay: boolean
-  hasSegments: boolean
-  currentIndex: number | null
-  totalSegments: number
-  subscribeTime: VrmPlayerState['subscribeTime']
-  getTimeSnapshot: VrmPlayerState['getTimeSnapshot']
-  fullscreen: boolean
-  canFullscreen: boolean
   mouthRef: MouthRef
+  transport: PlayerTransport
+  onSwitchVrm: (modelId: string) => Promise<void>
   onModelError: (message: string) => void
   onVrmLoadStart: () => void
   onVrmLoaded: () => void
-  onSwitchVrm: (modelId: string) => Promise<void>
-  onPlay: () => void
-  onPause: () => void
-  onPrev: () => void
-  onNext: () => void
-  renderPanelOpen: boolean
-  onOpenRenderPanel: () => void
-  onCloseRenderPanel: () => void
-  onOpenServerSettings: () => void
-  onOpenPoses: () => void
-  onAddModel: () => void
-  onEditModel: (modelId: string) => void
-  onToggleFullscreen: () => void
 }
 
 export function VRMPlayer({
@@ -53,61 +35,28 @@ export function VRMPlayer({
   gaze,
   activeModelId,
   listRefreshKey,
-  isPlaying,
-  canReplay,
-  hasSegments,
-  currentIndex,
-  totalSegments,
-  subscribeTime,
-  getTimeSnapshot,
-  fullscreen,
-  canFullscreen,
   mouthRef,
+  transport,
+  onSwitchVrm,
   onModelError,
   onVrmLoadStart,
   onVrmLoaded,
-  onSwitchVrm,
-  onPlay,
-  onPause,
-  onPrev,
-  onNext,
-  renderPanelOpen,
-  onOpenRenderPanel,
-  onCloseRenderPanel,
-  onOpenServerSettings,
-  onOpenPoses,
-  onAddModel,
-  onEditModel,
-  onToggleFullscreen,
 }: VRMPlayerProps) {
+  const chrome = usePlayerChrome()
   return (
-    <div className={fullscreen ? 'flex h-full min-h-0 flex-col gap-2 p-2' : 'space-y-3 p-3'}>
+    <div className={chrome.fullscreen ? 'flex h-full min-h-0 flex-col gap-2 p-2' : 'space-y-3 p-3'}>
       <PlayerHeader
         app={app}
         activeModelId={activeModelId}
         loadingModel={loadingModel}
         listRefreshKey={listRefreshKey}
-        hasSegments={hasSegments}
-        isPlaying={isPlaying}
-        canReplay={canReplay}
-        currentIndex={currentIndex}
-        totalSegments={totalSegments}
-        subscribeTime={subscribeTime}
-        getTimeSnapshot={getTimeSnapshot}
-        fullscreen={fullscreen}
-        canFullscreen={canFullscreen}
+        transport={transport}
         onSwitchVrm={(modelId) => {
           void onSwitchVrm(modelId)
         }}
-        onAddModel={onAddModel}
-        onEditModel={onEditModel}
-        onPlay={onPlay}
-        onPause={onPause}
-        onPrev={onPrev}
-        onNext={onNext}
-        onToggleFullscreen={onToggleFullscreen}
       />
-      <div className={fullscreen ? 'min-h-0 flex-1' : undefined}>
+      {/* 表示設定の歯車ボタンとドロワーはキャンバス領域に absolute で重ねるため relative にする。 */}
+      <div className={chrome.fullscreen ? 'relative min-h-0 flex-1' : 'relative'}>
         <VRMCanvas
           app={app}
           source={source}
@@ -116,21 +65,25 @@ export function VRMPlayer({
           expression={expression}
           speechText={speechText}
           gaze={gaze}
-          currentIndex={currentIndex}
-          totalSegments={totalSegments}
-          fullscreen={fullscreen}
-          hasSegments={hasSegments}
+          currentIndex={transport.currentIndex}
+          totalSegments={transport.totalSegments}
+          fullscreen={chrome.fullscreen}
+          hasSegments={transport.hasSegments}
           mouthRef={mouthRef}
-          onPrev={onPrev}
-          onNext={onNext}
+          onPrev={transport.onPrev}
+          onNext={transport.onNext}
           onLoadStart={onVrmLoadStart}
           onLoaded={onVrmLoaded}
-          renderPanelOpen={renderPanelOpen}
-          onOpenRenderPanel={onOpenRenderPanel}
-          onCloseRenderPanel={onCloseRenderPanel}
-          onOpenServerSettings={onOpenServerSettings}
-          onOpenPoses={onOpenPoses}
         />
+        {!chrome.renderPanelOpen ? <RenderSettingsButton onOpen={chrome.onOpenRenderPanel} /> : null}
+        {chrome.renderPanelOpen ? (
+          <RenderSettingsPanel
+            app={app}
+            onClose={chrome.onCloseRenderPanel}
+            onOpenServerSettings={chrome.onOpenServerSettings}
+            onOpenPoses={chrome.onOpenPoses}
+          />
+        ) : null}
       </div>
     </div>
   )

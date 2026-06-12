@@ -6,8 +6,8 @@ import type { EmotionBinding } from '../emotions.js'
 import { EMOTION_NAMES } from '../emotions.js'
 import { DEFAULT_POSE_NAMES, getRegistrationGuide } from '../guidance.js'
 import type { PlayerSettingsStore } from '../player/player-settings-store.js'
+import { resolvePoseNames } from '../pose-registry/attachments.js'
 import type { PoseRegistryStore } from '../pose-registry/store.js'
-import { isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled, registerToolIfEnabled } from '../registration.js'
 import type { ToolDeps, ToolHandlerExtra } from '../types.js'
 import { createErrorResponse } from '../utils.js'
@@ -74,7 +74,7 @@ export function registerVrmPublicTools(
             ? {
                 modelId: defaultModel.id,
                 name: defaultModel.name,
-                poses: resolvePoseNames(defaultModel, poseRegistry),
+                poses: resolvePoseNames(defaultModel.poses, poseRegistry),
               }
             : null,
           defaultPoses: DEFAULT_POSE_NAMES,
@@ -126,7 +126,7 @@ export function registerVrmPublicTools(
           modelId: model.id,
           name: model.name,
           isDefault: model.ownerUserId === visibility.userId && model.isDefault,
-          poses: resolvePoseNames(model, poseRegistry),
+          poses: resolvePoseNames(model.poses, poseRegistry),
         }))
         const structured: Record<string, unknown> = {
           models,
@@ -234,7 +234,7 @@ export function registerVrmPublicTools(
           vrmSizeBytes: model.vrmSizeBytes,
           updatedAt: model.updatedAt,
           emotionBindings: model.emotionBindings,
-          poses: resolvePoseNames(model, poseRegistry),
+          poses: resolvePoseNames(model.poses, poseRegistry),
         }))
         const summary =
           entries.length === 0 ? 'No VRM models registered.' : `${entries.length} VRM model(s) registered.`
@@ -293,7 +293,7 @@ export function registerVrmPublicTools(
           newDefault: {
             modelId: updated.id,
             name: updated.name,
-            poses: resolvePoseNames(updated, poseRegistry),
+            poses: resolvePoseNames(updated.poses, poseRegistry),
           },
           previousDefault,
           appliesTo: [
@@ -332,13 +332,4 @@ function resolveVrmVisibility(playerSettings: PlayerSettingsStore | undefined, e
   const userId = resolveUserId(extra)
   const settings = playerSettings?.applyDefaults({}, userId)
   return { userId, usePublicVrms: settings?.usePublicVrms ?? true }
-}
-
-function resolvePoseNames(model: VrmModel, poseRegistry: PoseRegistryStore): string[] {
-  const names = new Set<string>()
-  for (const attachment of model.poses ?? []) {
-    if (!isBuiltinPoseResourceId(attachment.poseId) && !poseRegistry.get(attachment.poseId)) continue
-    names.add(attachment.name)
-  }
-  return [...names]
 }

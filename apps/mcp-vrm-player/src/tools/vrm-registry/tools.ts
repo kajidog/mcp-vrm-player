@@ -5,11 +5,11 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
 import { resolveUserId } from '../auth-context.js'
-import { EMOTION_NAMES, type EmotionBinding, isEmotionName } from '../emotions.js'
+import { EMOTION_NAMES, type EmotionBinding, validateEmotionBindings } from '../emotions.js'
 import type { PlayerUIToolContext } from '../player-ui/context.js'
+import { validatePoseAttachments } from '../pose-registry/attachments.js'
 import type { PoseRegistryStore } from '../pose-registry/store.js'
 import type { ModelPoseAttachment } from '../pose-registry/types.js'
-import { isBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled } from '../registration.js'
 import type { ToolHandlerExtra } from '../types.js'
 import { createErrorResponse } from '../utils.js'
@@ -24,42 +24,12 @@ function toMetadataPayload(model: VrmModel, userId?: string): Omit<VrmModel, 'vr
     : rest
 }
 
-function validateAttachments(
-  poseRegistry: PoseRegistryStore,
-  userId: string,
-  poses: ModelPoseAttachment[] | undefined
-): void {
-  if (poses === undefined) return
-  for (const pose of poses) {
-    if (!pose.poseId.trim()) throw new Error('poses[].poseId is required')
-    if (!pose.name.trim()) throw new Error('poses[].name is required')
-    if (isBuiltinPoseResourceId(pose.poseId)) continue
-    if (!poseRegistry.getOwned(pose.poseId, userId)) throw new Error(`Pose not found: ${pose.poseId}`)
-  }
-}
-
 const emotionBindingSchema = z.object({
   emotion: z.enum(EMOTION_NAMES),
   expressionName: z.string().optional(),
   speakerId: z.number().optional(),
   weight: z.number().min(0).max(1).optional(),
 })
-
-function validateEmotionBindings(bindings: EmotionBinding[] | undefined): void {
-  if (bindings === undefined) return
-  const seen = new Set<string>()
-  for (const binding of bindings) {
-    if (!isEmotionName(binding.emotion)) throw new Error(`Unknown emotion: ${binding.emotion}`)
-    if (seen.has(binding.emotion)) throw new Error(`Duplicate emotion binding: ${binding.emotion}`)
-    seen.add(binding.emotion)
-    if (binding.expressionName !== undefined && !binding.expressionName.trim()) {
-      throw new Error('emotionBindings[].expressionName must not be empty')
-    }
-    if (binding.weight !== undefined && (binding.weight < 0 || binding.weight > 1)) {
-      throw new Error('emotionBindings[].weight must be between 0 and 1')
-    }
-  }
-}
 
 async function loadConfiguredDefaultVrm(
   configuredPath: string
@@ -182,7 +152,7 @@ export function registerVrmRegistryTools(
     ): Promise<CallToolResult> => {
       try {
         const userId = resolveUserId(extra)
-        validateAttachments(poseRegistry, userId, input.poses)
+        validatePoseAttachments(poseRegistry, userId, input.poses)
         validateEmotionBindings(input.emotionBindings)
         const model = await registry.register({ ...input, ownerUserId: userId })
         return { content: [{ type: 'text', text: JSON.stringify({ vrm: toMetadataPayload(model, userId) }) }] }
@@ -227,7 +197,7 @@ export function registerVrmRegistryTools(
       try {
         const userId = resolveUserId(extra)
         const { modelId, ...fields } = input
-        validateAttachments(poseRegistry, userId, fields.poses)
+        validatePoseAttachments(poseRegistry, userId, fields.poses)
         validateEmotionBindings(fields.emotionBindings)
         const model = registry.update(modelId, fields, userId)
         return { content: [{ type: 'text', text: JSON.stringify({ vrm: toMetadataPayload(model, userId) }) }] }

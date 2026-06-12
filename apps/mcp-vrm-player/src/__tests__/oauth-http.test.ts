@@ -219,6 +219,41 @@ describe('Origin validation', () => {
   })
 })
 
+describe('Host validation', () => {
+  it('IPv6 ループバックはポート付きでも許可される', async () => {
+    const app = createApp({
+      config: { ...baseConfig, allowedHosts: ['localhost', '127.0.0.1', '[::1]'] },
+    })
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: '[::1]:3000',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    // Host 検証は通過し、initialize でないため 400 になる（403 ではない）。
+    expect(response.status).toBe(400)
+  })
+
+  it('allowlist 外の Host は 403 で拒否する', async () => {
+    const app = createApp()
+
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Host: 'evil.example.com',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(403)
+  })
+})
+
 describe('VRM OAuth HTTP options', () => {
   it('VRM 固有の resource name はアプリ側デフォルトから作る', () => {
     expect(
