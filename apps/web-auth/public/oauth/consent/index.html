@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting...</title>
+    <script>
+      ;(function () {
+        var base = '/vrm-mcp/'
+        var target = new URL(base, window.location.origin)
+        var params = new URLSearchParams(window.location.search)
+        params.set('p', '/oauth/consent')
+        target.search = params.toString()
+        target.hash = window.location.hash || ''
+        window.location.replace(target.toString())
+      })()
+    </script>
+  </head>
+  <body>Redirecting...</body>
+</html>

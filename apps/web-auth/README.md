@@ -89,9 +89,9 @@ pnpm build
 ## GitHub Pages デプロイ
 
 1. GitHub リポジトリの Settings > Pages で Source を "GitHub Actions" に設定
-2. `dist/` フォルダを gh-pages ブランチにプッシュ
+2. `main` に push するか、`Deploy Web Auth to GitHub Pages` workflow を手動実行する
 
-`/oauth/consent` への直リンクは GitHub Pages の SPA fallback 用 `404.html` で `/vrm-mcp/?p=/oauth/consent` に戻します。Supabase の Authentication > URL Configuration には、Site URL に加えて次を Redirect URL として許可してください。
+Supabase OAuth Server の Authorization Path は `/oauth/consent` にします。GitHub Pages で直リンクが 404 にならないよう、`/oauth/consent/index.html` と SPA fallback 用 `404.html` が `/vrm-mcp/?p=/oauth/consent` に戻します。Supabase の Authentication > URL Configuration には、Site URL に加えて次を Redirect URL として許可してください。
 
 ```text
 https://kajidog.github.io/vrm-mcp/**
