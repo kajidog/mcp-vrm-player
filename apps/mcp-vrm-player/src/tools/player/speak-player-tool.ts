@@ -5,6 +5,7 @@ import * as z from 'zod'
 import { getVrmModelUrl } from '../../vrm-http.js'
 import { resolveUserId } from '../auth-context.js'
 import { EMOTION_NAMES, type EmotionName, normalizeEmotion, resolveEmotionBinding } from '../emotions.js'
+import { composeDescription, filterToolRefs } from '../guidance-refs.js'
 import { EMOTION_GUIDE, getRegistrationGuide } from '../guidance.js'
 import { BUILTIN_POSE_IDS, isBuiltinPoseResourceId, toBuiltinPoseResourceId } from '../pose-registry/types.js'
 import { registerAppToolIfEnabled } from '../registration.js'
@@ -44,7 +45,14 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
     'speak_player',
     {
       title: 'Speak Player',
-      description: `Creates the VRM TTS player UI for user conversation. Usually call vrm_start_here first. Provide segments [{ text, emotion?, pose?, gaze?, speedScale? }] and optional modelId; modelId falls back to the registered default. Use vrm_find_models to discover model IDs and pose names, then pass segments[].pose as a pose name only. Emotions are fixed values: ${EMOTION_GUIDE}. gaze is optional per segment: camera means eye contact, away means looking away from the camera, front means neutral forward gaze. speedScale is optional per segment and overrides player speed settings for that segment.`,
+      description: composeDescription(
+        disabledTools,
+        `Creates the VRM TTS player UI for user conversation. Provide segments [{ text, emotion?, pose?, gaze?, speedScale? }] and optional modelId; modelId falls back to the registered default. Pass segments[].pose as a pose name only. Emotions are fixed values: ${EMOTION_GUIDE}. gaze is optional per segment: camera means eye contact, away means looking away from the camera, front means neutral forward gaze. speedScale is optional per segment and overrides player speed settings for that segment.`,
+        [
+          { tool: 'start_here', text: 'Usually call vrm_start_here first.' },
+          { tool: 'find_models', text: 'Use vrm_find_models to discover model IDs and pose names.' },
+        ]
+      ),
       inputSchema: {
         modelId: z.string().optional().describe('VRM model ID. Falls back to the registered default model.'),
         segments: z
@@ -55,7 +63,9 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
                 .string()
                 .optional()
                 .describe(
-                  'Pose name from vrm_find_models models[].poses. Do not pass pose resource IDs. Defaults to idle.'
+                  composeDescription(disabledTools, 'Pose name. Do not pass pose resource IDs. Defaults to idle.', [
+                    { tool: 'find_models', text: 'Discover pose names from vrm_find_models models[].poses.' },
+                  ])
                 ),
               emotion: z
                 .enum(EMOTION_NAMES)
@@ -248,11 +258,17 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
               }
             : {}),
         }
+        const nextParts = filterToolRefs(disabledTools, [
+          { tool: 'speak_player', text: 'vrm_speak_player (speak again)' },
+          { tool: 'find_models', text: 'vrm_find_models (look up models/poses)' },
+          { tool: 'set_default_model', text: 'vrm_set_default_model (change default)' },
+        ])
+        const nextLine = nextParts.length > 0 ? `\nNext: ${nextParts.join(' | ')}` : ''
         return {
           content: [
             {
               type: 'text',
-              text: `VRM Player started. viewUUID: ${viewUUID} 「${textPreview}」\nNext: vrm_speak_player (speak again) | vrm_find_models (look up models/poses) | vrm_set_default_model (change default)`,
+              text: `VRM Player started. viewUUID: ${viewUUID} 「${textPreview}」${nextLine}`,
             },
           ],
           structuredContent: structured,
