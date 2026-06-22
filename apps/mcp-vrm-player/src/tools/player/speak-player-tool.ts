@@ -115,7 +115,7 @@ export function registerSpeakPlayerTool(deps: ToolDeps, runtime: PlayerRuntime):
             action: 'openModelManager',
             mode: 'register',
             displayed: true,
-            registrationGuide: getRegistrationGuide(false),
+            registrationGuide: getRegistrationGuide(disabledTools, false),
           }
           return {
             content: [

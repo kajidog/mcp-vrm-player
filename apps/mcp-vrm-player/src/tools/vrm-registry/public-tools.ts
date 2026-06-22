@@ -85,7 +85,7 @@ export function registerVrmPublicTools(
             autoPlay: effectiveSettings.autoPlay,
             speedScale: effectiveSettings.speedScale,
           },
-          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(false) } : {}),
+          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(disabledTools, false) } : {}),
         }
         const next =
           models.length === 0
@@ -145,7 +145,7 @@ export function registerVrmPublicTools(
         }))
         const structured: Record<string, unknown> = {
           models,
-          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(false) } : {}),
+          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(disabledTools, false) } : {}),
         }
         if (models.length === 0) {
           const next = buildNext(disabledTools, [
@@ -207,7 +207,7 @@ export function registerVrmPublicTools(
           mode: modelId ? 'edit' : 'register',
           modelId,
           displayed: true,
-          registrationGuide: getRegistrationGuide(knowsHowToUse),
+          registrationGuide: getRegistrationGuide(disabledTools, knowsHowToUse),
         }
         return {
           content: [
