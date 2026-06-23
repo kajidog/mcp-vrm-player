@@ -4,6 +4,7 @@ import { getVrmModelUrl } from '../../vrm-http.js'
 import { resolveUserId } from '../auth-context.js'
 import type { EmotionBinding } from '../emotions.js'
 import { EMOTION_NAMES } from '../emotions.js'
+import { buildNext, composeDescription, filterToolRefs } from '../guidance-refs.js'
 import { DEFAULT_POSE_NAMES, getRegistrationGuide } from '../guidance.js'
 import type { PlayerSettingsStore } from '../player/player-settings-store.js'
 import { resolvePoseNames } from '../pose-registry/attachments.js'
@@ -84,9 +85,15 @@ export function registerVrmPublicTools(
             autoPlay: effectiveSettings.autoPlay,
             speedScale: effectiveSettings.speedScale,
           },
-          next: models.length === 0 ? 'Call vrm_open_model_manager with knowsHowToUse: true.' : 'Use vrm_speak_player.',
-          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(false) } : {}),
+          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(disabledTools, false) } : {}),
         }
+        const next =
+          models.length === 0
+            ? buildNext(disabledTools, [
+                { tool: 'open_model_manager', text: 'Call vrm_open_model_manager with knowsHowToUse: true.' },
+              ])
+            : buildNext(disabledTools, [{ tool: 'speak_player', text: 'Use vrm_speak_player.' }])
+        if (next) structured.next = next
         return {
           content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
           structuredContent: structured,
@@ -103,8 +110,16 @@ export function registerVrmPublicTools(
     'find_models',
     {
       title: 'Find VRM Models',
-      description:
-        'Find registered VRM models and valid pose names. Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player. Pass pose names only. Per-segment gaze values are camera, away, or front.',
+      description: composeDescription(
+        disabledTools,
+        'Find registered VRM models and valid pose names. Pass pose names only. Per-segment gaze values are camera, away, or front.',
+        [
+          {
+            tool: 'speak_player',
+            text: 'Use this when the user asks for a specific model or before passing modelId/segments[].pose to speak_player.',
+          },
+        ]
+      ),
       inputSchema: {
         modelId: z.string().optional().describe('Exact VRM model ID to look up.'),
         query: z.string().optional().describe('Case-insensitive search text matched against model name or ID.'),
@@ -130,12 +145,16 @@ export function registerVrmPublicTools(
         }))
         const structured: Record<string, unknown> = {
           models,
-          ...(models.length === 0
-            ? {
-                registrationGuide: getRegistrationGuide(false),
-                next: 'Call vrm_open_model_manager with knowsHowToUse: true, then ask the user to register a VRM model.',
-              }
-            : {}),
+          ...(models.length === 0 ? { registrationGuide: getRegistrationGuide(disabledTools, false) } : {}),
+        }
+        if (models.length === 0) {
+          const next = buildNext(disabledTools, [
+            {
+              tool: 'open_model_manager',
+              text: 'Call vrm_open_model_manager with knowsHowToUse: true, then ask the user to register a VRM model.',
+            },
+          ])
+          if (next) structured.next = next
         }
         return {
           content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
@@ -188,7 +207,7 @@ export function registerVrmPublicTools(
           mode: modelId ? 'edit' : 'register',
           modelId,
           displayed: true,
-          registrationGuide: getRegistrationGuide(knowsHowToUse),
+          registrationGuide: getRegistrationGuide(disabledTools, knowsHowToUse),
         }
         return {
           content: [
@@ -212,8 +231,16 @@ export function registerVrmPublicTools(
     'list_vrms',
     {
       title: 'List VRMs',
-      description:
-        'List registered VRM models. Use this before calling speak_player to discover valid modelId values, model pose names, and emotion bindings. Pass segments[].pose as one of poses only; pose resource IDs are not accepted. Pass segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious, and segments[].gaze as camera/away/front. Returns metadata only (no binary).',
+      description: composeDescription(
+        disabledTools,
+        'List registered VRM models. Pass segments[].pose as one of poses only; pose resource IDs are not accepted. Pass segments[].emotion as neutral/happy/angry/sad/relaxed/surprised/serious, and segments[].gaze as camera/away/front. Returns metadata only (no binary).',
+        [
+          {
+            tool: 'speak_player',
+            text: 'Use this before calling speak_player to discover valid modelId values, model pose names, and emotion bindings.',
+          },
+        ]
+      ),
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -259,10 +286,19 @@ export function registerVrmPublicTools(
     'set_default_model',
     {
       title: 'Set Default Model',
-      description:
-        'Set one of your own registered VRM models as the persistent default used by speak_player when modelId is omitted. Public models owned by other users cannot be set as the default. Returns the previous default so it can be restored.',
+      description: composeDescription(
+        disabledTools,
+        'Set one of your own registered VRM models as the persistent default. Public models owned by other users cannot be set as the default. Returns the previous default so it can be restored.',
+        [{ tool: 'speak_player', text: 'The default is used by speak_player when modelId is omitted.' }]
+      ),
       inputSchema: {
-        modelId: z.string().describe('VRM model ID to set as the default. Discover IDs with vrm_list_vrms.'),
+        modelId: z
+          .string()
+          .describe(
+            composeDescription(disabledTools, 'VRM model ID to set as the default.', [
+              { tool: 'list_vrms', text: 'Discover IDs with vrm_list_vrms.' },
+            ])
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -297,19 +333,24 @@ export function registerVrmPublicTools(
           },
           previousDefault,
           appliesTo: [
-            'vrm_speak_player (when modelId is omitted)',
+            ...filterToolRefs(disabledTools, [
+              { tool: 'speak_player', text: 'vrm_speak_player (when modelId is omitted)' },
+            ]),
             'player UI model resolution',
-            'vrm_start_here display',
+            ...filterToolRefs(disabledTools, [{ tool: 'start_here', text: 'vrm_start_here display' }]),
           ],
         }
         const revertHint = previousDefault
           ? ` Previous default: "${previousDefault.name}" — restore it by calling this tool with modelId="${previousDefault.modelId}".`
           : ''
+        const speakHint = filterToolRefs(disabledTools, [
+          { tool: 'speak_player', text: ' vrm_speak_player will use it when modelId is omitted.' },
+        ]).join('')
         return {
           content: [
             {
               type: 'text',
-              text: `Default VRM model set to "${updated.name}". vrm_speak_player will use it when modelId is omitted.${revertHint}\n${JSON.stringify(structured, null, 2)}`,
+              text: `Default VRM model set to "${updated.name}".${speakHint}${revertHint}\n${JSON.stringify(structured, null, 2)}`,
             },
           ],
           structuredContent: structured,
